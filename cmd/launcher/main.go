@@ -17,6 +17,7 @@ import (
 
 	"github.com/xinix00/hop-os-surf/app/hopapi"
 	"github.com/xinix00/hop-os-surf/app/launcher"
+	"github.com/xinix00/hop-os-surf/app/ui"
 	"github.com/xinix00/hop-os-surf/stack/scene"
 	"github.com/xinix00/hop-os-surf/stack/surf"
 )
@@ -67,8 +68,8 @@ func main() {
 	// voert uit en haalt daarna meteen de status — de knop toont het gevolg.
 	refreshC := make(chan struct{}, 1)
 	actC := make(chan action, 1)
-	m.Refresh = func() { post(refreshC, struct{}{}) }
-	m.OnStart = func(a launcher.App) { post(actC, action{name: a.Name, spec: a.Spec}) }
+	m.Refresh = func() { ui.PostLatest(refreshC, struct{}{}) }
+	m.OnStart = func(a launcher.App) { ui.PostLatest(actC, action{name: a.Name, spec: a.Spec}) }
 	conn.OnKey = m.Key
 
 	if err := m.Start(); err != nil {
@@ -107,19 +108,4 @@ func main() {
 	}()
 
 	select {} // volledig event-gedreven: leeslus + worker drijven de app
-}
-
-// post zet v op c zonder ooit te blokkeren (vol: oudste eruit, verse erin).
-func post[T any](c chan T, v T) {
-	for {
-		select {
-		case c <- v:
-			return
-		default:
-			select {
-			case <-c:
-			default:
-			}
-		}
-	}
 }

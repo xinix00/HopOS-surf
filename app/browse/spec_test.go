@@ -6,8 +6,8 @@ package browse
 // de pagina moet staan (woordenlijst: docs/browser-plan.md). *.todo.html
 // zijn de gaten die nog open staan: ze renderen wél mee op het contactvel,
 // maar hun verwachtingen tellen pas mee met SPEC_TODO=1 (rood = de klus).
-// Het contactvel — docs/browser-spec.png — wordt elke run vers geschreven,
-// volledig offline via de handler-transport.
+// Het optionele contactvel wordt met SPEC_SHEET=1 geschreven, volledig
+// offline via de handler-transport.
 
 import (
 	"bytes"
@@ -68,7 +68,18 @@ func TestSpec(t *testing.T) {
 		})
 	}
 
-	// Het contactvel: alle fixtures naast elkaar, elke run vers in docs/.
+	// Het contactvel is een expliciet meetartifact, niet een bijwerking van
+	// de hermetische testpoort. SPEC_SHEET=1 kiest docs/browser-spec.png;
+	// een ander pad schrijft daarheen.
+	out := os.Getenv("SPEC_SHEET")
+	if out == "" {
+		return
+	}
+	if out == "1" {
+		out = filepath.Join("..", "..", "docs", "browser-spec.png")
+	}
+
+	// Alle fixtures naast elkaar.
 	const kols, marge, labelH = 3, 8, 16
 	rijen := (len(cellen) + kols - 1) / kols
 	sheet := image.NewRGBA(image.Rect(0, 0, marge+kols*(specW+marge), marge+rijen*(specH+labelH+marge)))
@@ -80,7 +91,6 @@ func TestSpec(t *testing.T) {
 		drawTxt(sheet, x+4, y+4, 1, colBarTxt, c.naam)
 		draw.Draw(sheet, image.Rect(x, y+labelH, x+specW, y+labelH+specH), c.img, image.Point{}, draw.Src)
 	}
-	out := filepath.Join("..", "..", "docs", "browser-spec.png")
 	fo, err := os.Create(out)
 	if err != nil {
 		t.Fatal(err)

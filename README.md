@@ -59,20 +59,23 @@ SCREENSHOT_OUT=$PWD/docs/launcher.png go test ./app/launcher -run Screenshot
 ![taskman](docs/taskman.png)
 ![launcher](docs/launcher.png)
 
-The browser renders real news sites (live network — these refresh on
-every test run that touches `app/browse`). Same page, two frame widths:
+The browser renders real news sites in an explicit live measurement.
+Same page, two frame widths:
 `@media` is evaluated against the real width, so 480 gets the mobile CSS
 and 1280 the desktop layout (real flex/grid columns):
 
 ```sh
-go test ./app/browse -run ScreenshotSites   # writes docs/browser-<site>[-desktop].png
+tools/browser-shots.sh  # fixture-contactvel + live browser-<site>[-desktop].png
 ```
 
-The engine's living spec is [docs/browser-plan.md](docs/browser-plan.md):
+The resulting component boundaries are documented in
+[docs/browser-architecture.md](docs/browser-architecture.md). The engine's
+living spec is [docs/browser-plan.md](docs/browser-plan.md):
 every behaviour is a fixture in `app/browse/testdata/spec/` with its
-expectations embedded, and `go test ./app/browse -run Spec` renders them all
-(including the open `.todo` gaps) to
-[docs/browser-spec.png](docs/browser-spec.png) — offline, every run.
+expectations embedded. `go test ./app/browse -run Spec` checks them
+hermetically; `SPEC_SHEET=1 go test ./app/browse -run Spec` also renders
+all fixtures (including the open `.todo` gaps) to
+[docs/browser-spec.png](docs/browser-spec.png).
 
 | tweakers.net | nrc.nl | nu.nl | gethop.org/hop/ |
 |---|---|---|---|

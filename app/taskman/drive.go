@@ -5,27 +5,12 @@ import (
 	"time"
 
 	"github.com/xinix00/hop-os-surf/app/hopapi"
+	"github.com/xinix00/hop-os-surf/app/ui"
 	"github.com/xinix00/hop-os-surf/stack/scene"
 )
 
 // logReq identificeert één gewenste logstaart; de lege req betekent "stop".
 type logReq struct{ agent, task, stream string }
-
-// post zet v op c zonder ooit te blokkeren (vol: oudste eruit, verse erin) —
-// de hooks draaien onder de app-lock, dus laatste-verzoek-wint is de wet.
-func post[T any](c chan T, v T) {
-	for {
-		select {
-		case c <- v:
-			return
-		default:
-			select {
-			case <-c:
-			default:
-			}
-		}
-	}
-}
 
 // Drive is de hele taskman-app achter de scene-verbinding: hooks, de
 // fetch-worker (overzicht + open jobdetail) en de log-worker (de éne open
@@ -40,11 +25,11 @@ func Drive(conn *scene.Conn, client *hopapi.Client, logf func(string, ...any)) e
 	refreshC := make(chan struct{}, 1)
 	detailC := make(chan string, 1)
 	logC := make(chan logReq, 1)
-	a.Refresh = func() { post(refreshC, struct{}{}) }
-	a.OpenJob = func(job string) { post(detailC, job) }
-	a.CloseJob = func() { post(detailC, "") }
-	a.OpenLog = func(agent, task, stream string) { post(logC, logReq{agent, task, stream}) }
-	a.CloseLog = func() { post(logC, logReq{}) }
+	a.Refresh = func() { ui.PostLatest(refreshC, struct{}{}) }
+	a.OpenJob = func(job string) { ui.PostLatest(detailC, job) }
+	a.CloseJob = func() { ui.PostLatest(detailC, "") }
+	a.OpenLog = func(agent, task, stream string) { ui.PostLatest(logC, logReq{agent, task, stream}) }
+	a.CloseLog = func() { ui.PostLatest(logC, logReq{}) }
 	conn.OnKey = a.Key
 	closed := make(chan struct{})
 	conn.OnClose = func() { close(closed) }

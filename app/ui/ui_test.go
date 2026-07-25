@@ -44,3 +44,25 @@ func TestRune(t *testing.T) {
 		}
 	}
 }
+
+func TestPostLatest(t *testing.T) {
+	c := make(chan int, 1)
+	PostLatest(c, 1)
+	PostLatest(c, 2)
+	if got := <-c; got != 2 {
+		t.Fatalf("PostLatest bewaarde %d, wil de laatste waarde 2", got)
+	}
+
+	// Ook een verkeerd geconfigureerd ongebufferd UI-kanaal mag de
+	// event-loop nooit laten spinnen of blokkeren.
+	done := make(chan struct{})
+	go func() {
+		PostLatest(make(chan int), 1)
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("PostLatest blokkeert op een ongebufferd kanaal")
+	}
+}

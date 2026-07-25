@@ -3,6 +3,7 @@ package browse
 import (
 	"bytes"
 	"crypto/x509"
+	"errors"
 	"image"
 	"image/color"
 	"image/png"
@@ -10,6 +11,12 @@ import (
 	"strings"
 	"testing"
 )
+
+type errorTransport struct{ err error }
+
+func (t errorTransport) RoundTrip(*http.Request) (*http.Response, error) {
+	return nil, t.err
+}
 
 // testsite is een mini-web: twee pagina's met een relatieve link ertussen —
 // via de handler-transport, dus zonder sockets.
@@ -621,10 +628,12 @@ func TestCACertBundel(t *testing.T) {
 func TestEchteFoutInStatus(t *testing.T) {
 	// De fout van de lijn hoort onvervormd in de statusbalk te komen —
 	// geen platgeslagen tussenlaag ("Non-ok Response") meer.
-	s := NewSession() // echt netwerk — de fetch faalt op DNS, niet op een handler
+	s := newSession(&http.Client{Transport: errorTransport{
+		err: errors.New("dial tcp: lookup xn--dit-bestaat-echt-niet-4ob.invalid: no such host"),
+	}})
 	err := s.Go("http://xn--dit-bestaat-echt-niet-4ob.invalid/")
 	if err == nil {
-		t.Skip("onverwacht: .invalid resolvet hier")
+		t.Fatal("verwacht de echte transportfout")
 	}
 	if strings.Contains(err.Error(), "Non-ok") {
 		t.Fatalf("kale gost-dom-fout niet vervangen: %v", err)

@@ -19,8 +19,11 @@ import (
 // SITE_LIST=a,b kiest andere sites; SITE_WIDTH=<px> rendert alléén die
 // breedte; SITE_SHOTS=<dir> stuurt de schoten ergens anders heen en
 // schrijft er dan ook de volledige pagina bij (voor layout-debugwerk).
-// Geen netwerk → skip, de gate blijft offline groen.
+// Alleen LIVE_SITES=1 activeert deze meetrun; de gewone gate blijft offline.
 func TestScreenshotSites(t *testing.T) {
+	if os.Getenv("LIVE_SITES") == "" {
+		t.Skip("set LIVE_SITES=1 voor de visuele netwerkmeting")
+	}
 	dir, full := "../../docs", false
 	if v := os.Getenv("SITE_SHOTS"); v != "" {
 		dir, full = v, true

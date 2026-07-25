@@ -19,12 +19,19 @@ func Drive(win *window.Window, home string, logf func(string, ...any)) error {
 	view := View{}
 
 	var presentErr error
+	present := func(rects ...image.Rectangle) {
+		if presentErr != nil {
+			return
+		}
+		if err := win.Present(rects...); err != nil {
+			presentErr = err
+			logf("browser: present: %v", err)
+		}
+	}
 	redraw := func() {
 		img := win.Image() // elke frame opvragen: na een resize is hij nieuw
 		view.Render(img)
-		if err := win.Present(); err != nil {
-			presentErr = err
-		}
+		present()
 	}
 	// Alleen gescrold: de pixels schuiven in het buffer en enkel de
 	// blootgelegde strook wordt getekend (RenderScrolled); de balken
@@ -33,9 +40,17 @@ func Drive(win *window.Window, home string, logf func(string, ...any)) error {
 		img := win.Image()
 		view.RenderScrolled(img)
 		b := img.Bounds()
-		if err := win.Present(image.Rect(b.Min.X, b.Min.Y+BarH, b.Max.X, b.Max.Y-StatusH)); err != nil {
-			presentErr = err
-		}
+		present(image.Rect(b.Min.X, b.Min.Y+BarH, b.Max.X, b.Max.Y-StatusH))
+	}
+	redrawBar := func() {
+		img := win.Image()
+		view.RenderBar(img)
+		present(view.Bar(img))
+	}
+	redrawStatus := func() {
+		img := win.Image()
+		view.RenderStatus(img)
+		present(view.StatusRect(img))
 	}
 
 	// Navigatie draait in een worker-goroutine: een trage of dooie site mag
@@ -56,14 +71,19 @@ func Drive(win *window.Window, home string, logf func(string, ...any)) error {
 		navT0 = time.Now()
 		logf("browser: %s", what)
 		view.Status, view.Err = what+" ...", false
-		redrawStatus(win, &view, logf)
+		redrawStatus()
+		if presentErr != nil {
+			navBusy = false
+			return
+		}
 		go func() { navDone <- load() }()
 	}
 
-	// De echte vensterhoogte is de viewport-basis voor fixed-panelen
-	// (height: 100%-calc); bij een resize gaat hij mee.
-	viewH = win.Image().Bounds().Dy()
-	view.Page = sess.Layout(win.Image().Bounds().Dx())
+	viewport := func(w, h int) Viewport {
+		return Viewport{Width: w, Height: h - BarH - StatusH}.normalized()
+	}
+	bounds := win.Image().Bounds()
+	view.Page = sess.LayoutViewport(viewport(bounds.Dx(), bounds.Dy()))
 	view.Addr = sess.URL()
 	if home != "" {
 		view.Addr = home
@@ -86,8 +106,8 @@ func Drive(win *window.Window, home string, logf func(string, ...any)) error {
 				view.Status, view.Err = fmt.Sprintf("ok (%dms) %s", ms, sess.URL()), false
 			}
 			view.Addr = sess.URL()
-			viewH = win.Image().Bounds().Dy()
-			view.Page = sess.Layout(win.Image().Bounds().Dx())
+			bounds := win.Image().Bounds()
+			view.Page = sess.LayoutViewport(viewport(bounds.Dx(), bounds.Dy()))
 			redraw()
 
 		case ev, ok := <-win.Events():
@@ -100,8 +120,7 @@ func Drive(win *window.Window, home string, logf func(string, ...any)) error {
 				// mogelijk staan (ScrollBy(0) klemt hem op de nieuwe hoogte).
 				// Tijdens een navigatie niet layouten (sess is van de worker).
 				if !navBusy {
-					viewH = int(ev.Y)
-					view.Page = sess.Layout(int(ev.X))
+					view.Page = sess.LayoutViewport(viewport(int(ev.X), int(ev.Y)))
 				}
 				view.ScrollBy(0, int(ev.Y))
 				redraw()
@@ -184,7 +203,7 @@ func Drive(win *window.Window, home string, logf func(string, ...any)) error {
 				case 8: // Backspace
 					if view.Addr != "" {
 						view.Addr = view.Addr[:len(view.Addr)-1]
-						redrawBar(win, &view, logf)
+						redrawBar()
 					}
 				case 38, 40, 33, 34, 32, 36, 35: // scroll-toetsen
 					_, h := win.Size()
@@ -210,31 +229,11 @@ func Drive(win *window.Window, home string, logf func(string, ...any)) error {
 				default:
 					if r := Rune(ev.Code, shift); r != 0 {
 						view.Addr += string(r)
-						redrawBar(win, &view, logf)
+						redrawBar()
 					}
 				}
 			}
 		}
 	}
 	return presentErr
-}
-
-// redrawBar hertekent alléén de adresbalk: tikken kost zo een strook van
-// een paar KB per toets in plaats van een vol frame.
-func redrawBar(win *window.Window, view *View, logf func(string, ...any)) {
-	img := win.Image()
-	view.RenderBar(img)
-	if err := win.Present(view.Bar(img)); err != nil {
-		logf("browser: present: %v", err)
-	}
-}
-
-// redrawStatus idem voor de statusbalk: het laden begint met één strook
-// damage onderin, niet met een vol frame.
-func redrawStatus(win *window.Window, view *View, logf func(string, ...any)) {
-	img := win.Image()
-	view.RenderStatus(img)
-	if err := win.Present(view.StatusRect(img)); err != nil {
-		logf("browser: present: %v", err)
-	}
 }

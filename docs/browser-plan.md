@@ -92,8 +92,10 @@ evenhoog "kort stukje" "deze kaart"
 ```
 
 - `go test ./app/browse -run Spec` draait alles offline (handler-transport)
-  en schrijft het **contactvel** `docs/browser-spec.png` — elke fixture zoals
-  de browser hem rendert, elke run vers.
+  en controleert de verwachtingen zonder bestanden te wijzigen.
+- `SPEC_SHEET=1 go test ./app/browse -run Spec` schrijft daarnaast het
+  **contactvel** `docs/browser-spec.png`; `tools/browser-shots.sh` combineert
+  dat met de expliciete live-sitemeting.
 - `*.todo.html` zijn de open gaten: ze staan wél op het vel, maar hun
   verwachtingen tellen pas mee met `SPEC_TODO=1` (rood = de klus). Gat
   gedicht → `.todo` uit de naam → de poort bewaakt het voortaan.
@@ -153,6 +155,6 @@ dat is het web dat beweegt, en wij zijn het web dat leest.
 2. implementeren tot de fixture groen is — het échte mechanisme, geen
    raad-heuristieken;
 3. `.todo` uit de bestandsnaam: vanaf dan bewaakt de poort het gedrag;
-4. `tools/test.sh` groen — en dán pas de site-schoten
-   (`go test ./app/browse -run ScreenshotSites`) verversen en kijken wat het
+4. `tools/test.sh` groen — en dán pas met `tools/browser-shots.sh` het
+   contactvel en de site-schoten verversen en kijken wat het
    op tweakers/nrc/nu/gethop oplevert.

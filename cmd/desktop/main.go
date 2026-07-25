@@ -17,7 +17,6 @@ import (
 	"net/http"
 	"os"
 	"strings"
-	"sync"
 
 	"github.com/xinix00/hop-os-surf/app/browse"
 	"github.com/xinix00/hop-os-surf/app/calc"
@@ -25,6 +24,7 @@ import (
 	"github.com/xinix00/hop-os-surf/app/hopapi"
 	"github.com/xinix00/hop-os-surf/app/launcher"
 	"github.com/xinix00/hop-os-surf/app/taskman"
+	"github.com/xinix00/hop-os-surf/app/ui"
 	"github.com/xinix00/hop-os-surf/stack/compositor"
 	"github.com/xinix00/hop-os-surf/stack/scene"
 	"github.com/xinix00/hop-os-surf/stack/surf"
@@ -93,8 +93,7 @@ func runLauncher(surfAddr string, logf func(string, ...any)) {
 		},
 		"calc": func(id int, title string) {
 			conn := scene.Open(surfAddr, title, 240, 320, logf)
-			conn.OnClose = func() { doneC <- id }
-			runCalc(conn, logf)
+			go func() { logf("calc: %v", calc.Drive(conn, logf)); doneC <- id }()
 		},
 	}
 	apps := []launcher.App{{Name: "clock"}, {Name: "browser"}, {Name: "calc"}}
@@ -105,8 +104,8 @@ func runLauncher(surfAddr string, logf func(string, ...any)) {
 
 	refreshC := make(chan struct{}, 1)
 	actC := make(chan string, 2)
-	m.Refresh = func() { post(refreshC, struct{}{}) }
-	m.OnStart = func(a launcher.App) { post(actC, a.Name) }
+	m.Refresh = func() { ui.PostLatest(refreshC, struct{}{}) }
+	m.OnStart = func(a launcher.App) { ui.PostLatest(actC, a.Name) }
 	conn.OnKey = m.Key
 	if err := m.Start(); err != nil {
 		logf("launcher: %v", err)
@@ -156,50 +155,4 @@ func runLauncher(surfAddr string, logf func(string, ...any)) {
 			m.SetData(status())
 		}
 	}()
-}
-
-// runCalc is de calc-wiring van cmd/calc, op een bestaande verbinding: de
-// leeslus drijft de app, er is geen eigen goroutine — de WM-CLOSE (OnClose,
-// gezet door de starter) is het enige einde.
-func runCalc(conn *scene.Conn, logf func(string, ...any)) {
-	// press komt uit twee paden van de leeslus (EVENT en toetsen); de mutex
-	// maakt de app onafhankelijk van dat detail (zelfde les als cmd/calc).
-	var mu sync.Mutex
-	var c calc.Calc
-	var display *scene.Node
-	press := func(key byte) {
-		mu.Lock()
-		c.Press(key)
-		conn.SetText(display, calc.Line(&c))
-		mu.Unlock()
-	}
-	root, disp := calc.Tree(press)
-	display = disp
-	conn.OnKey = func(code uint32, down bool) {
-		if !down {
-			return
-		}
-		if k := calc.Key(code); k != 0 {
-			press(k)
-		}
-	}
-	if err := conn.Show(root); err != nil {
-		logf("calc: %v", err)
-	}
-}
-
-// post zet v op c zonder ooit te blokkeren (vol: oudste eruit, verse erin) —
-// de menu-hooks draaien onder de menu-lock en mogen nooit wachten.
-func post[T any](c chan T, v T) {
-	for {
-		select {
-		case c <- v:
-			return
-		default:
-			select {
-			case <-c:
-			default:
-			}
-		}
-	}
 }
