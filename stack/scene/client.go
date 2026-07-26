@@ -167,8 +167,9 @@ func (c *Conn) Show(root *Node) error {
 }
 
 // pingLoop stuurt elke 10s een levensteken: de display ruimt sessies op die
-// 30s zwijgen (een hard gekilde app stuurt nooit een FIN). Een schrijffout
-// sluit de verbinding; de leeslus heelt daarna met een verse boom.
+// 15s zwijgen (een hard gekilde app stuurt nooit een FIN, en de switch RST't
+// sinds 26-07 niet meer namens dode apps). Een schrijffout sluit de
+// verbinding; de leeslus heelt daarna met een verse boom.
 func (c *Conn) pingLoop() {
 	for range time.Tick(10 * time.Second) {
 		c.mu.Lock()

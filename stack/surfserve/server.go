@@ -335,8 +335,12 @@ func (s *Server) handle(conn net.Conn) {
 	for {
 		// Liveness: clients pingen elke ~10s (surf.TypePing). Een hard
 		// gekilde slot stuurt nooit een FIN — zonder deze deadline blijft
-		// zijn window eeuwig in de compositor staan (gemeten 19-07).
-		conn.SetReadDeadline(time.Now().Add(30 * time.Second))
+		// zijn window eeuwig in de compositor staan (gemeten 19-07). Sinds
+		// de switch geen RST meer namens dode apps stuurt (hopswitch/rst.go
+		// weg, 26-07) is deze deadline hét opruimpad: 1,5× het ping-interval
+		// — ruim genoeg voor jitter, en nooit korter dan het ping-tempo van
+		// de oudste app in het veld (dan sneuvelen gezonde verbindingen).
+		conn.SetReadDeadline(time.Now().Add(15 * time.Second))
 		h, buf, err = surf.ReadMsg(conn, buf)
 		if err != nil {
 			// RST = de peer is dood: de switch stuurt hem bij slot-dood, de

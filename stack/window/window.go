@@ -127,7 +127,7 @@ func (win *Window) Events() <-chan Event { return win.events }
 // die blijft presenteren heelt zichzelf. Present is bedoeld voor één
 // tekenende goroutine.
 // pingLoop stuurt elke 10s een levensteken zolang het window leeft: de
-// display ruimt sessies op die 30s zwijgen (een hard gekilde app stuurt
+// display ruimt sessies op die 15s zwijgen (een hard gekilde app stuurt
 // nooit een FIN — zijn window bleef anders eeuwig staan, gemeten 19-07).
 // Fouten hier zijn geen ramp: de eerstvolgende Present heelt de verbinding.
 func (win *Window) pingLoop() {
