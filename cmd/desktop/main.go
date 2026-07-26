@@ -14,7 +14,6 @@ import (
 	"fmt"
 	"log"
 	"net"
-	"net/http"
 	"os"
 	"strings"
 
@@ -30,6 +29,7 @@ import (
 	"github.com/xinix00/hop-os-surf/stack/surf"
 	"github.com/xinix00/hop-os-surf/stack/surfserve"
 	"github.com/xinix00/hop-os-surf/stack/window"
+	"hop-os/metal/app/applib/apphttp"
 )
 
 func main() {
@@ -45,7 +45,7 @@ func main() {
 		log.Fatalf("desktop: surf-listener %s: %v", *surfAddr, err)
 	}
 	go srv.ServeSURF(ln)
-	go func() { log.Fatal(http.ListenAndServe(*httpAddr, srv.Handler())) }()
+	go func() { log.Fatal(apphttp.ListenAndServe(*httpAddr, srv.Handler())) }()
 	logf("desktop: KVM op http://%s/kvm — apps via %s", *httpAddr, *surfAddr)
 
 	// Taskman is de vaste kijker op het cluster: altijd aan zodra er een HOP

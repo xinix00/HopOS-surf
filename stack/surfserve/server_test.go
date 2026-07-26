@@ -9,7 +9,6 @@ import (
 	"io"
 	"net"
 	"net/http"
-	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
@@ -60,7 +59,7 @@ func TestEndToEnd(t *testing.T) {
 	rec := &recListener{Listener: l, conns: make(chan net.Conn, 4)}
 	go srv.ServeSURF(rec)
 
-	web := httptest.NewServer(srv.Handler())
+	web := newWeb(t, srv)
 	defer web.Close()
 
 	// App-kant: window openen, rood vullen, presenteren.
@@ -200,7 +199,7 @@ func postInput(t *testing.T, base, body string) {
 // TestKVMPage: de KVM-pagina wordt geserveerd en bevat de event-bedrading.
 func TestKVMPage(t *testing.T) {
 	srv := New(compositor.New(64, 64), t.Logf)
-	web := httptest.NewServer(srv.Handler())
+	web := newWeb(t, srv)
 	defer web.Close()
 	resp, err := http.Get(web.URL + "/kvm")
 	if err != nil {

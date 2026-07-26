@@ -3,7 +3,6 @@ package surfserve
 import (
 	"net"
 	"net/http"
-	"net/http/httptest"
 	"os"
 	"testing"
 	"time"
@@ -39,7 +38,7 @@ func TestScreenshotDemo(t *testing.T) {
 		t.Fatal(err)
 	}
 	go srv.ServeSURF(l)
-	web := httptest.NewServer(srv.Handler())
+	web := newWeb(t, srv)
 	defer web.Close()
 
 	// Vier apps van vier "nodes": de klok als pixel-app (P1), taskman en calc

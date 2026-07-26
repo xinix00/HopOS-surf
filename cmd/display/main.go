@@ -8,7 +8,6 @@ package main
 
 import (
 	"net"
-	"net/http"
 	"strconv"
 	"strings"
 
@@ -16,6 +15,7 @@ import (
 	"github.com/xinix00/hop-os-surf/stack/surf"
 	"github.com/xinix00/hop-os-surf/stack/surfserve"
 	"hop-os/metal/app/applib"
+	"hop-os/metal/app/applib/apphttp"
 	"hop-os/metal/app/applib/appnet"
 )
 
@@ -70,7 +70,7 @@ func main() {
 		httpPort = "80"
 	}
 	app.Logf("display: %dx%d — surf %s:%s, web-kvm http://%s:%s/kvm", w, h, ip, surfPort, ip, httpPort)
-	app.Logf("http: %v", http.ListenAndServe(":"+httpPort, srv.Handler()))
+	app.Logf("http: %v", apphttp.ListenAndServe(":"+httpPort, srv.Handler()))
 	app.Exit(1) // een display die stopt met serveren is een crash, by design
 }
 

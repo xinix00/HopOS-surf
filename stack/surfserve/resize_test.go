@@ -7,7 +7,6 @@ import (
 	"image/png"
 	"net"
 	"net/http"
-	"net/http/httptest"
 	"testing"
 	"time"
 
@@ -42,7 +41,7 @@ func TestResizeFlow(t *testing.T) {
 		t.Fatal(err)
 	}
 	go srv.ServeSURF(l)
-	web := httptest.NewServer(srv.Handler())
+	web := newWeb(t, srv)
 	defer web.Close()
 
 	red := color.RGBA{0xEE, 0x10, 0x10, 0xFF}

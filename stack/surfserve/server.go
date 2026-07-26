@@ -13,7 +13,7 @@ import (
 	"image"
 	"image/png"
 	"net"
-	"net/http"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -21,6 +21,7 @@ import (
 
 	"github.com/xinix00/hop-os-surf/stack/compositor"
 	"github.com/xinix00/hop-os-surf/stack/surf"
+	"hop-os/metal/app/applib/apphttp"
 )
 
 // orphanGrace: hoe lang een window zonder verbinding blijft staan. Ruim
@@ -550,24 +551,32 @@ func (s *Server) Input(ev surf.Input) {
 
 // Handler is de HTTP-kant: /screen.png (het meetinstrument), /kvm (browser-
 // KVM) en /input (de event-terugweg van de KVM-pagina).
-func (s *Server) Handler() http.Handler {
-	mux := http.NewServeMux()
-	mux.HandleFunc("/screen.png", s.serveScreen)
-	mux.HandleFunc("/stream", s.serveStream)
-	mux.HandleFunc("/kvm", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		fmt.Fprint(w, kvmPage)
-	})
-	mux.HandleFunc("/input", s.serveInput)
-	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		http.Redirect(w, r, "/kvm", http.StatusFound)
-	})
-	return mux
+//
+// Het transport is apphttp (HopOS) en niet net/http: die laatste linkt
+// onvoorwaardelijk crypto/tls mee — ~2,9MB TLS in het display-image voor een
+// KVM-pagina op het LAN die nooit https praat. Routeren doen we hier zelf: vijf
+// paden zijn een switch, geen mux.
+func (s *Server) Handler() apphttp.Handler {
+	return func(w apphttp.ResponseWriter, r *apphttp.Request) {
+		switch r.Path {
+		case "/screen.png":
+			s.serveScreen(w, r)
+		case "/stream":
+			s.serveStream(w, r)
+		case "/kvm":
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			fmt.Fprint(w, kvmPage)
+		case "/input":
+			s.serveInput(w, r)
+		default:
+			apphttp.Redirect(w, "/kvm", apphttp.StatusFound)
+		}
+	}
 }
 
 // serveScreen componeert (lazy — geen client, geen werk) en cachet de PNG
 // per compositor-generatie: tien kijkers kosten één encode.
-func (s *Server) serveScreen(w http.ResponseWriter, r *http.Request) {
+func (s *Server) serveScreen(w apphttp.ResponseWriter, r *apphttp.Request) {
 	s.comp.Compose()
 	img, gen := s.comp.Snapshot()
 
@@ -581,7 +590,7 @@ func (s *Server) serveScreen(w http.ResponseWriter, r *http.Request) {
 		enc := png.Encoder{CompressionLevel: png.BestSpeed}
 		if err := enc.Encode(&buf, img); err != nil {
 			s.pngMu.Unlock()
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			apphttp.Error(w, err.Error(), apphttp.StatusInternalServerError)
 			return
 		}
 		s.pngGen, s.pngData = gen, buf.Bytes()
@@ -591,6 +600,9 @@ func (s *Server) serveScreen(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "image/png")
 	w.Header().Set("Cache-Control", "no-store")
+	// De lengte kennen we al: die zelf zetten scheelt apphttp een tweede kopie
+	// van een megabyte PNG in zijn antwoordbuffer.
+	w.Header().Set("Content-Length", strconv.Itoa(len(data)))
 	w.Write(data)
 }
 
@@ -599,12 +611,7 @@ func (s *Server) serveScreen(w http.ResponseWriter, r *http.Request) {
 // (putImageData) en er wordt geen PNG meer geëncodeerd voor kijkers. Idle
 // scherm = nul bytes. 25 Hz polling op het generatienummer is display-side
 // een mutex-check; de kijkers-kant van docs/gui-ontwerp.md §6.
-func (s *Server) serveStream(w http.ResponseWriter, r *http.Request) {
-	fl, ok := w.(http.Flusher)
-	if !ok {
-		http.Error(w, "streaming unsupported", http.StatusInternalServerError)
-		return
-	}
+func (s *Server) serveStream(w apphttp.ResponseWriter, r *apphttp.Request) {
 	w.Header().Set("Content-Type", "application/octet-stream")
 	w.Header().Set("Cache-Control", "no-store")
 
@@ -614,7 +621,7 @@ func (s *Server) serveStream(w http.ResponseWriter, r *http.Request) {
 	// blijft gelijk: u32 len | (gecomprimeerde) payload.
 	var zw *flate.Writer
 	var zbuf bytes.Buffer
-	if r.URL.Query().Get("z") == "1" {
+	if r.Query().Get("z") == "1" {
 		zw, _ = flate.NewWriter(&zbuf, flate.BestSpeed)
 	}
 
@@ -637,11 +644,13 @@ func (s *Server) serveStream(w http.ResponseWriter, r *http.Request) {
 			if _, err := w.Write(frame); err != nil {
 				return
 			}
-			fl.Flush()
+			if err := w.Flush(); err != nil {
+				return
+			}
 			gen = next
 		}
 		select {
-		case <-r.Context().Done():
+		case <-r.Done():
 			return
 		case <-time.After(15 * time.Millisecond):
 		}
@@ -675,27 +684,27 @@ func (m inputMsg) event() (surf.Input, bool) {
 	return ev, true
 }
 
-func (s *Server) serveInput(w http.ResponseWriter, r *http.Request) {
+func (s *Server) serveInput(w apphttp.ResponseWriter, r *apphttp.Request) {
 	if wsUpgrade(r) {
 		s.serveInputWS(w, r) // de blijvende input-stream van de KVM-pagina
 		return
 	}
-	if r.Method != http.MethodPost {
-		http.Error(w, "POST only", http.StatusMethodNotAllowed)
+	if r.Method != "POST" {
+		apphttp.Error(w, "POST only", apphttp.StatusMethodNotAllowed)
 		return
 	}
 	var m inputMsg
 	if err := json.NewDecoder(r.Body).Decode(&m); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		apphttp.Error(w, err.Error(), apphttp.StatusBadRequest)
 		return
 	}
 	ev, ok := m.event()
 	if !ok {
-		http.Error(w, "unknown kind", http.StatusBadRequest)
+		apphttp.Error(w, "unknown kind", apphttp.StatusBadRequest)
 		return
 	}
 	s.Input(ev)
-	w.WriteHeader(http.StatusNoContent)
+	w.WriteHeader(apphttp.StatusNoContent)
 }
 
 func clampU16(v int) uint16 {

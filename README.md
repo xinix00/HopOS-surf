@@ -25,7 +25,7 @@ GUI code. Design dossier (the negotiated source of truth, Dutch):
 | `app/clock/` | the demo clock face |
 | `app/calc/` | calculator logic + its scene tree (host-tested) |
 | `app/browse/` | the browser: x/net/html DOM + cascadia selectors + own fetch/CSS/layout/rendering (host-tested) |
-| `app/hopapi/` | client for HOP's `/v1` API with HMAC request signing — reads, `Apply`, `Delete` and SSE `Logs` (host-tested) |
+| `app/hopapi/` | client for HOP's `/v1` API with HMAC request signing — reads, `Apply`, `Delete` and SSE `Logs`, over `apphttp` (host-tested) |
 | `app/taskman/` | taskmanager as a scene app: AGENTS/TASKS, per-job task details, live log tail per task (host-tested) |
 | `app/launcher/` | launcher as a scene app: the boot-config app catalog as buttons, click toggles start/stop (host-tested) |
 | `cmd/display` | the display server app (SURF on :7878, HTTP on :80) |
@@ -47,6 +47,27 @@ app builds, and a checkout of HopOS next to this repo (`../hop-os` — see the
 replace lines in `go.mod`). Artifacts land in `out/display.elf` and
 `out/clock.elf`; submit them as HopOS jobs (see HopOS `docs/app.md`). The
 clock finds its display through the job-spec env `SURF_ADDR=<display-node>:7878`.
+
+### No TLS in an app that never speaks https
+
+Everything here that talks plain HTTP — the display's `:80` (web-KVM,
+`/screen.png`, the frame stream) and the `/v1` calls of taskman and launcher —
+runs on HopOS' `apphttp` instead of `net/http`. The reason is image size:
+`net/http` links `crypto/tls` unconditionally, and in an app image that costs
+more than the entire netstack. Measured 26-07 (zero `crypto/tls` symbols left
+in the symbol table):
+
+| app | before | after |
+|---|---|---|
+| `display.elf` | 8.68 MB | **5.88 MB** |
+| `launcher.elf` | 8.42 MB | **5.48 MB** |
+| `taskman.elf` | 8.45 MB | **5.54 MB** |
+| `browser.elf` | 14.40 MB | 14.40 MB — stays on `net/http`, it really does need TLS |
+
+Nothing was given up for it: `apphttp` does chunked (the SSE log tail, the
+frame stream), keep-alive, and the WebSocket upgrade of the KVM page. The
+whole end-to-end suite runs through it — `stack/surfserve` tests hit a real
+`apphttp.Serve` listener, not `httptest`.
 
 Render the demo screenshots without any hardware:
 

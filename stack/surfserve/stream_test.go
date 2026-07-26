@@ -9,7 +9,6 @@ import (
 	"io"
 	"net"
 	"net/http"
-	"net/http/httptest"
 	"testing"
 	"time"
 
@@ -93,7 +92,7 @@ func TestStream(t *testing.T) {
 		t.Fatal(err)
 	}
 	go srv.ServeSURF(l)
-	web := httptest.NewServer(srv.Handler())
+	web := newWeb(t, srv)
 	defer web.Close()
 
 	resp, err := http.Get(web.URL + "/stream")

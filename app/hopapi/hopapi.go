@@ -1,8 +1,12 @@
 // Package hopapi is de leesbril op het HOP-cluster: een kleine client voor
 // de /v1-API van de leader (elke agent proxyt die door, dus HOP_ADDR mag naar
-// elke agent wijzen). Alleen stdlib, eigen JSON-types met precies de velden
-// die we tonen — geen dependency op de hop-module, dus host-testbaar en
-// tamago-compatibel.
+// elke agent wijzen). Eigen JSON-types met precies de velden die we tonen —
+// geen dependency op de hop-module, dus host-testbaar en tamago-compatibel.
+//
+// Het transport is apphttp (HopOS) en niet net/http: het cluster praat plain
+// http op het interne net, en net/http linkt onvoorwaardelijk crypto/tls mee —
+// ~2,9MB die taskman en launcher anders in élk image meedragen voor TLS dat ze
+// nooit gebruiken. Zie de pakket-doc van hop-os/metal/app/applib/apphttp.
 //
 // Auth is HOP's HMAC-schema (hop/pkg/httputil): X-Hop-Auth =
 // hex(HMAC-SHA256(key, METHOD\nPATH\nhex(sha256(body)))). Lege key = geen
@@ -11,19 +15,17 @@ package hopapi
 
 import (
 	"bufio"
-	"bytes"
-	"context"
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
-	"net/http"
-	"net/url"
 	"strings"
+	"sync"
 	"time"
+
+	"hop-os/metal/app/applib/apphttp"
 )
 
 // Agent is één geregistreerde node (GET /v1/agents).
@@ -82,10 +84,39 @@ type JobStatus struct {
 type Client struct {
 	Base string
 	Key  string
-	HTTP *http.Client // nil = default met 10s-timeout
 }
 
-var defaultHTTP = &http.Client{Timeout: 10 * time.Second}
+// callTimeout is de totaaltermijn van een gewone call: een agent die niet
+// antwoordt mag de UI-lus niet gijzelen. De logstaart staat er bewust búíten —
+// die hóórt open te blijven.
+const callTimeout = 10 * time.Second
+
+// call doet één gesigneerd verzoek. De aanroeper sluit resp.Body.
+func (c *Client) call(method, path string, body []byte, timeout time.Duration) (*apphttp.Response, error) {
+	req := apphttp.Call{
+		Method:  method,
+		URL:     c.Base + path,
+		Body:    body,
+		Timeout: timeout,
+	}
+	if body != nil {
+		req.Header = apphttp.Header{"Content-Type": "application/json"}
+	}
+	if c.Key != "" {
+		if req.Header == nil {
+			req.Header = apphttp.Header{}
+		}
+		req.Header.Set("X-Hop-Auth", sign(c.Key, method, path, body))
+	}
+	return apphttp.Do(req)
+}
+
+// fout maakt van een niet-2xx-antwoord een leesbare fout; de body zegt vaak
+// wat er mis is, dus de eerste 200 bytes gaan mee.
+func fout(wat string, resp *apphttp.Response) error {
+	b, _ := io.ReadAll(io.LimitReader(resp.Body, 200))
+	return fmt.Errorf("hop: %s: %s (%s)", wat, resp.Status, b)
+}
 
 // Status haalt het clusteroverzicht op.
 func (c *Client) Status() (Status, error) {
@@ -119,30 +150,13 @@ func (c *Client) JobStatus(name string) (JobStatus, error) {
 // spec is de rauwe JSON: de launcher stuurt zijn catalogusregels
 // onaangeroerd door, dus elke jobspec die de API begrijpt werkt hier ook.
 func (c *Client) Apply(spec []byte) error {
-	req, err := http.NewRequest("POST", c.Base+"/v1/jobs", bytes.NewReader(spec))
+	resp, err := c.call("POST", "/v1/jobs", spec, callTimeout)
 	if err != nil {
-		return err
-	}
-	req.Header.Set("Content-Type", "application/json")
-	if c.Key != "" {
-		req.Header.Set("X-Hop-Auth", sign(c.Key, "POST", req.URL.Path, spec))
-	}
-	client := c.HTTP
-	if client == nil {
-		client = defaultHTTP
-	}
-	resp, err := client.Do(req)
-	if err != nil {
-		var ue *url.Error
-		if errors.As(err, &ue) {
-			return fmt.Errorf("hop: apply: %w", ue.Err)
-		}
-		return err
+		return fmt.Errorf("hop: apply: %w", err)
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
-		b, _ := io.ReadAll(io.LimitReader(resp.Body, 200))
-		return fmt.Errorf("hop: apply: %s (%s)", resp.Status, b)
+	if resp.StatusCode != apphttp.StatusOK && resp.StatusCode != apphttp.StatusCreated {
+		return fout("apply", resp)
 	}
 	return nil
 }
@@ -150,29 +164,13 @@ func (c *Client) Apply(spec []byte) error {
 // Delete verwijdert een job (DELETE /v1/jobs/{name}) — de stop-knop van de
 // launcher: HOP ruimt de tasks op en het window verdwijnt vanzelf.
 func (c *Client) Delete(name string) error {
-	req, err := http.NewRequest("DELETE", c.Base+"/v1/jobs/"+name, nil)
+	resp, err := c.call("DELETE", "/v1/jobs/"+name, nil, callTimeout)
 	if err != nil {
-		return err
-	}
-	if c.Key != "" {
-		req.Header.Set("X-Hop-Auth", sign(c.Key, "DELETE", req.URL.Path, nil))
-	}
-	client := c.HTTP
-	if client == nil {
-		client = defaultHTTP
-	}
-	resp, err := client.Do(req)
-	if err != nil {
-		var ue *url.Error
-		if errors.As(err, &ue) {
-			return fmt.Errorf("hop: delete: %w", ue.Err)
-		}
-		return err
+		return fmt.Errorf("hop: delete: %w", err)
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNoContent {
-		b, _ := io.ReadAll(io.LimitReader(resp.Body, 200))
-		return fmt.Errorf("hop: delete: %s (%s)", resp.Status, b)
+	if resp.StatusCode != apphttp.StatusOK && resp.StatusCode != apphttp.StatusNoContent {
+		return fout("delete", resp)
 	}
 	return nil
 }
@@ -180,52 +178,38 @@ func (c *Client) Delete(name string) error {
 // LogStream is één live logstaart. Lines levert de regels; het kanaal sluit
 // als de stream eindigt (task weg, verbinding stuk). Close stopt de stream.
 type LogStream struct {
-	Lines  <-chan string
-	cancel context.CancelFunc
+	Lines <-chan string
+
+	body io.Closer
+	stop chan struct{}
+	once sync.Once
 }
 
-// Close stopt de stream; Lines sluit daarna vanzelf.
-func (s *LogStream) Close() { s.cancel() }
-
-// logClient: zonder totale timeout — een logstaart is bedoeld om open te
-// blijven; annuleren gaat via de context van de request (Close).
-var logClient = &http.Client{}
+// Close stopt de stream; Lines sluit daarna vanzelf. De verbinding sluiten ís
+// het afbreek-signaal: de pomp hangt in een Read en komt eruit met een fout.
+func (s *LogStream) Close() {
+	s.once.Do(func() {
+		close(s.stop)
+		s.body.Close()
+	})
+}
 
 // Logs opent de live logstaart van één task (SSE: regels `data: <regel>`).
 // stream is "stdout" of "stderr"; agentID en taskID komen uit JobStatus.
 func (c *Client) Logs(agentID, taskID, stream string) (*LogStream, error) {
 	path := "/v1/agents/" + agentID + "/logs/" + taskID + "/" + stream
-	ctx, cancel := context.WithCancel(context.Background())
-	req, err := http.NewRequestWithContext(ctx, "GET", c.Base+path, nil)
+	// Geen totaaltermijn: een logstaart is bedoeld om open te blijven.
+	resp, err := c.call("GET", path, nil, 0)
 	if err != nil {
-		cancel()
-		return nil, err
+		return nil, fmt.Errorf("hop: logs: %w", err)
 	}
-	req.Header.Set("Accept", "text/event-stream")
-	if c.Key != "" {
-		req.Header.Set("X-Hop-Auth", sign(c.Key, "GET", req.URL.Path, nil))
-	}
-	client := c.HTTP
-	if client == nil {
-		client = logClient
-	}
-	resp, err := client.Do(req)
-	if err != nil {
-		cancel()
-		var ue *url.Error
-		if errors.As(err, &ue) {
-			return nil, fmt.Errorf("hop: logs: %w", ue.Err)
-		}
-		return nil, err
-	}
-	if resp.StatusCode != http.StatusOK {
-		b, _ := io.ReadAll(io.LimitReader(resp.Body, 200))
-		resp.Body.Close()
-		cancel()
-		return nil, fmt.Errorf("hop: logs: %s (%s)", resp.Status, b)
+	if resp.StatusCode != apphttp.StatusOK {
+		defer resp.Body.Close()
+		return nil, fout("logs", resp)
 	}
 
 	ch := make(chan string, 64)
+	ls := &LogStream{Lines: ch, body: resp.Body, stop: make(chan struct{})}
 	go func() {
 		defer close(ch)
 		defer resp.Body.Close()
@@ -238,41 +222,26 @@ func (c *Client) Logs(agentID, taskID, stream string) (*LogStream, error) {
 			}
 			select {
 			case ch <- line:
-			case <-ctx.Done():
+			case <-ls.stop:
 				return
 			}
 		}
 	}()
-	return &LogStream{Lines: ch, cancel: cancel}, nil
+	return ls, nil
 }
 
 // get doet een gesigneerde GET en decodeert JSON in out.
 func (c *Client) get(path string, out any) error {
-	req, err := http.NewRequest("GET", c.Base+path, nil)
+	resp, err := c.call("GET", path, nil, callTimeout)
 	if err != nil {
-		return err
-	}
-	if c.Key != "" {
-		req.Header.Set("X-Hop-Auth", sign(c.Key, "GET", req.URL.Path, nil))
-	}
-	client := c.HTTP
-	if client == nil {
-		client = defaultHTTP
-	}
-	resp, err := client.Do(req)
-	if err != nil {
-		// url.Error herhaalt de volledige URL ('Get "http://...": ...') —
-		// op een statusregel is alleen de oorzaak interessant.
-		var ue *url.Error
-		if errors.As(err, &ue) {
-			return fmt.Errorf("hop: %s: %w", path, ue.Err)
-		}
-		return err
+		// Het pad ervoor, de oorzaak erachter: op de statusregel van taskman
+		// moet dit in één oogopslag leesbaar zijn (Derek 19-07 — de fout liep
+		// onleesbaar door de voetregel heen).
+		return fmt.Errorf("hop: %s: %w", path, err)
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		b, _ := io.ReadAll(io.LimitReader(resp.Body, 200))
-		return fmt.Errorf("hop: %s: %s (%s)", path, resp.Status, b)
+	if resp.StatusCode != apphttp.StatusOK {
+		return fout(path, resp)
 	}
 	return json.NewDecoder(resp.Body).Decode(out)
 }

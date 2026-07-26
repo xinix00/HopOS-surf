@@ -5,7 +5,6 @@ import (
 	"crypto/sha1"
 	"encoding/base64"
 	"net"
-	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
@@ -37,7 +36,7 @@ func TestWSInput(t *testing.T) {
 		t.Fatal(err)
 	}
 	go srv.ServeSURF(l)
-	web := httptest.NewServer(srv.Handler())
+	web := newWeb(t, srv)
 	defer web.Close()
 
 	// Eén window met focus: toetsen horen daar te landen.

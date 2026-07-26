@@ -14,27 +14,27 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
-	"net/http"
 	"strings"
+
+	"hop-os/metal/app/applib/apphttp"
 )
 
 const wsGUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
 
 // wsUpgrade meldt of dit verzoek een WebSocket-handshake is.
-func wsUpgrade(r *http.Request) bool {
+func wsUpgrade(r *apphttp.Request) bool {
 	return strings.EqualFold(r.Header.Get("Upgrade"), "websocket")
 }
 
 // serveInputWS neemt de verbinding over en verwerkt input-events tot hij
 // sluit. Elk text/binary-frame is één inputMsg (zelfde JSON als de POST).
-func (s *Server) serveInputWS(w http.ResponseWriter, r *http.Request) {
+func (s *Server) serveInputWS(w apphttp.ResponseWriter, r *apphttp.Request) {
 	key := r.Header.Get("Sec-WebSocket-Key")
-	hj, ok := w.(http.Hijacker)
-	if key == "" || !ok {
-		http.Error(w, "bad websocket handshake", http.StatusBadRequest)
+	if key == "" {
+		apphttp.Error(w, "bad websocket handshake", apphttp.StatusBadRequest)
 		return
 	}
-	conn, brw, err := hj.Hijack()
+	conn, brw, err := w.Hijack()
 	if err != nil {
 		return
 	}
