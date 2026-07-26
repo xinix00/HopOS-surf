@@ -43,8 +43,9 @@ tools/test.sh        # host tests (incl. end-to-end window↔display) + tamago b
 ```
 
 Needs the [tamago toolchain](https://github.com/usbarmory/tamago-go) for the
-app builds, and a checkout of HopOS next to this repo (`../hop-os` — see the
-replace lines in `go.mod`). Artifacts land in `out/display.elf` and
+app builds, and a checkout of HopOS **v1.5.1 or newer** next to this repo
+(`../hop-os` — see the replace lines in `go.mod`; v1.5.1 is the first with the
+`apphttp` server the display runs on). Artifacts land in `out/display.elf` and
 `out/clock.elf`; submit them as HopOS jobs (see HopOS `docs/app.md`). The
 clock finds its display through the job-spec env `SURF_ADDR=<display-node>:7878`.
 

@@ -7,7 +7,7 @@ require (
 	github.com/tdewolff/canvas v0.0.0-20260714230319-248e24504c3b
 	golang.org/x/image v0.44.0
 	golang.org/x/net v0.55.0
-	hop-os/metal v0.0.0
+	hop-os/metal v1.5.1
 )
 
 require (
@@ -42,7 +42,11 @@ require (
 	star-tex.org/x/tex v0.7.1 // indirect
 )
 
-// hop-os/metal is (nog) geen fetchbare module: lokaal naast deze repo.
+// hop-os/metal is (nog) geen fetchbare module: lokaal naast deze repo. De
+// versie hierboven is daarom geen resolutie maar een ondergrens op papier —
+// v1.5.1 is de eerste met apphttp.Serve/Do, waar display, taskman en launcher
+// op draaien. Een oudere checkout naast deze repo compileert niet.
+//
 // Zijn replaces gelden niet transitief, dus hier herhaald (zelfde paden als
 // in hop-os/metal/go.mod).
 replace (
