@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/xinix00/hop-os-surf/app/hopapi"
 	"github.com/xinix00/hop-os-surf/stack/compositor"
 	"github.com/xinix00/hop-os-surf/stack/surf"
 	"github.com/xinix00/hop-os-surf/stack/surfserve"
@@ -42,6 +43,26 @@ func main() {
 	}
 	comp := compositor.New(w, h)
 	srv := surfserve.New(comp, app.Logf)
+
+	// De rode knop = de app stoppen. Alleen het window weghalen is niet genoeg:
+	// de app sterft, HOP ziet een dode task en herstart hem — het window komt
+	// terug en je krijgt het niet dicht (Derek 27-07). Dus verwijdert de display
+	// de job; de launcher heeft hem nog in zijn catalogus, dus één klik en hij
+	// draait weer. Zonder HOP_ADDR (los draaiend, geen orchestrator) blijft het
+	// oude gedrag: window weg, verder niets.
+	if addr := app.Env("HOP_ADDR"); addr != "" {
+		if !strings.Contains(addr, "://") {
+			addr = "http://" + addr
+		}
+		hop := &hopapi.Client{Base: addr, Key: app.Env("HOP_KEY")}
+		srv.OnCloseApp(func(job string) {
+			if err := hop.Delete(job); err != nil {
+				app.Logf("display: close %s: %v", job, err)
+				return
+			}
+			app.Logf("display: closed %s — job deleted", job)
+		})
+	}
 
 	surfPort := app.Env("ER_PORT_SURF")
 	if surfPort == "" {

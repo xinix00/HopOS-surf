@@ -216,3 +216,40 @@ func TestKVMPage(t *testing.T) {
 		}
 	}
 }
+
+// TestCloseDeletesJob pins wat het rode stoplichtje betekent: STOP DEZE APP.
+// Alleen het window weghalen is niet genoeg — de app sterft, de orchestrator
+// ziet een dode task en herstart hem, en het window staat er meteen weer
+// (Derek 27-07: "ze openen steeds opnieuw, ik kan ze niet meer sluiten").
+// De haak krijgt de HOP-jobnaam: de app-naam zónder de "@ slot"-staart.
+func TestCloseDeletesJob(t *testing.T) {
+	comp := compositor.New(320, 200)
+	srv := New(comp, t.Logf)
+
+	got := make(chan string, 1)
+	srv.OnCloseApp(func(job string) { got <- job })
+
+	// Een geparkeerd window (app-verbinding weg, window blijft staan): ook dát
+	// moet de job opruimen, anders blijft een wees zich herstarten.
+	sur := comp.Add("browser @ slot 5", 100, 80, false)
+	comp.Relayout()
+	srv.orphan(sur, "browser @ slot 5")
+
+	srv.closeSurface(sur)
+
+	select {
+	case job := <-got:
+		if job != "browser" {
+			t.Fatalf("closeApp kreeg %q, wil %q (de jobnaam, zonder @ slot)", job, "browser")
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("closeApp is nooit aangeroepen — de rode knop stopt de app niet")
+	}
+
+	eventually(t, "window opgeruimd", func() bool {
+		srv.mu.Lock()
+		defer srv.mu.Unlock()
+		_, still := srv.orphans[sur]
+		return !still
+	})
+}

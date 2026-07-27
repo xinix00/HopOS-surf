@@ -55,10 +55,23 @@ type Server struct {
 	// cursor die búíten de compositie om getekend wordt (fbblit-overlay op
 	// het echte glas; de compose blijft cursorvrij, docs/gui-ontwerp.md §5).
 	pointer func(x, y int)
+
+	// closeApp (optioneel): het rode stoplichtje betekent "stop deze app",
+	// niet "kill dit proces". Zonder deze haak sterft alleen de app en start
+	// de orchestrator hem meteen opnieuw — het window komt terug en je krijgt
+	// het niet dicht (Derek 27-07). Wie een HOP heeft (HOP_ADDR) hangt hier
+	// het verwijderen van de job aan; de launcher kan hem daarna weer starten.
+	closeApp func(job string)
 }
 
 // OnPointer registreert de cursor-volger (vóór het serveren zetten).
 func (s *Server) OnPointer(f func(x, y int)) { s.pointer = f }
+
+// OnCloseApp registreert wat er moet gebeuren als de gebruiker een window
+// sluit (het rode stoplichtje): job = de app-naam zonder de "@ slot"-staart,
+// dus precies de HOP-jobnaam. cmd/display hangt hier zijn DELETE aan. Vóór
+// het serveren zetten; zonder haak wordt alleen het window opgeruimd.
+func (s *Server) OnCloseApp(f func(job string)) { s.closeApp = f }
 
 // New maakt een server rond een compositor; logf mag nil zijn.
 func New(comp *compositor.Compositor, logf func(string, ...any)) *Server {
@@ -72,30 +85,51 @@ func New(comp *compositor.Compositor, logf func(string, ...any)) *Server {
 	// De WM beslist de maat: elke Relayout-wijziging wordt een CONFIGURE
 	// naar de eigenaar van de surface (docs/gui-ontwerp.md §3).
 	comp.OnResize(s.configure)
-	// Het rode stoplichtje: CLOSE naar de app (die hoort te sterven — zijn
-	// Close is definitief) en de sessie hard dicht; cleanup ruimt het window
-	// meteen op omdat bye staat. Een wees (geparkeerd window zonder sessie)
-	// mag eindelijk gewoon weg.
-	comp.OnClose(func(sur *compositor.Surface) {
-		s.mu.Lock()
-		sess := s.sessions[sur]
-		s.mu.Unlock()
-		if sess == nil {
-			s.mu.Lock()
-			delete(s.orphans, sur)
-			s.mu.Unlock()
-			s.comp.Remove(sur)
-			s.comp.Relayout()
-			return
-		}
-		sess.bye.Store(true)
-		if id, ok := sess.idOf(sur); ok {
-			sess.send(surf.TypeClose, id, nil)
-		}
-		sess.conn.Close() // de leeslus keert terug; cleanup doet de rest
-	})
+	comp.OnClose(s.closeSurface)
 	go s.reapOrphans()
 	return s
+}
+
+// closeSurface is het rode stoplichtje: CLOSE naar de app (die hoort te
+// sterven — zijn Close is definitief) en de sessie hard dicht; cleanup ruimt
+// het window meteen op omdat bye staat. Een wees (geparkeerd window zonder
+// sessie) mag eindelijk gewoon weg.
+//
+// En het belangrijkste: sluiten betekent "stop deze app", niet "kill dit
+// proces". Draait er een orchestrator, dan ziet die een dode task en start hem
+// meteen opnieuw — het window komt terug en je krijgt het niet dicht (Derek
+// 27-07). Daarom eerst de closeApp-haak (cmd/display: DELETE de job).
+func (s *Server) closeSurface(sur *compositor.Surface) {
+	s.mu.Lock()
+	sess := s.sessions[sur]
+	orph, parked := s.orphans[sur]
+	s.mu.Unlock()
+
+	app := ""
+	if sess != nil {
+		app = sess.app
+	} else if parked {
+		app = orph.app
+	}
+	// In een goroutine: een trage of dooie HOP mag de klik — en dus de hele
+	// input-lus — nooit ophouden.
+	if app != "" && s.closeApp != nil {
+		go s.closeApp(nameStem(app))
+	}
+
+	if sess == nil {
+		s.mu.Lock()
+		delete(s.orphans, sur)
+		s.mu.Unlock()
+		s.comp.Remove(sur)
+		s.comp.Relayout()
+		return
+	}
+	sess.bye.Store(true)
+	if id, ok := sess.idOf(sur); ok {
+		sess.send(surf.TypeClose, id, nil)
+	}
+	sess.conn.Close() // de leeslus keert terug; cleanup doet de rest
 }
 
 // orphan parkeert een window waarvan de verbinding wegviel zonder CLOSE:
