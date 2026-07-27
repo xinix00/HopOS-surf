@@ -18,6 +18,7 @@ import (
 	"github.com/xinix00/hop-os-surf/app/hopapi"
 	"github.com/xinix00/hop-os-surf/app/taskman"
 	"github.com/xinix00/hop-os-surf/stack/scene"
+	"github.com/xinix00/hop-os-surf/stack/surf"
 )
 
 func main() {
@@ -27,15 +28,16 @@ func main() {
 		app.Logf("net: %v", err)
 		app.Exit(1)
 	}
-	addr := app.Env("SURF_ADDR")
+	addr := surf.Addr(app.Env) // SURF_ADDR, anders de eigen node (HOPOS_HOST:7878)
 	if addr == "" {
-		app.Logf("taskman: SURF_ADDR not set (want <display-node>:7878)")
+		app.Logf("taskman: SURF_ADDR not set and no HOPOS_HOST (want <display-node>:7878)")
 		app.Exit(1)
 	}
+	// De agent woont op élke node op het vaste interne adres; HOP_ADDR is
+	// alleen nodig om een ándere node aan te wijzen.
 	hopAddr := app.Env("HOP_ADDR")
 	if hopAddr == "" {
-		app.Logf("taskman: HOP_ADDR not set (want <node>:8080)")
-		app.Exit(1)
+		hopAddr = "10.100.0.1:8080"
 	}
 	if !strings.Contains(hopAddr, "://") {
 		hopAddr = "http://" + hopAddr

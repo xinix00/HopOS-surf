@@ -21,7 +21,9 @@ func (f *fakeConn) SetText(n *scene.Node, s string) {
 	}
 }
 
-// catalogus zoals HopOS hem levert: hopos.apps[]-regels, {{host}} al vervangen.
+// catalogus zoals HopOS hem levert: hopos.apps[]-regels, letterlijk (de
+// SURF_ADDR hier is de expliciete cross-node-vorm; zonder valt een app terug
+// op zijn eigen node — surf.Addr).
 const demoCatalog = `[
 	{"name":"clock","driver":"hop","artifacts":[{"url":"http://10.0.0.5/clock.elf"}],"env":{"SURF_ADDR":"10.0.0.7:7878"}},
 	{"name":"calc","driver":"hop","artifacts":[{"url":"http://10.0.0.5/calc.elf"}]},

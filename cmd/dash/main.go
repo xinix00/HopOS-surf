@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/xinix00/hop-os-surf/stack/scene"
+	"github.com/xinix00/hop-os-surf/stack/surf"
 	"hop-os/metal/app/applib"
 	"hop-os/metal/app/applib/appnet"
 )
@@ -23,9 +24,9 @@ func main() {
 		app.Logf("net: %v", err)
 		app.Exit(1)
 	}
-	addr := app.Env("SURF_ADDR")
+	addr := surf.Addr(app.Env) // SURF_ADDR, anders de eigen node (HOPOS_HOST:7878)
 	if addr == "" {
-		app.Logf("dash: SURF_ADDR not set (want <display-node>:7878)")
+		app.Logf("dash: SURF_ADDR not set and no HOPOS_HOST (want <display-node>:7878)")
 		app.Exit(1)
 	}
 

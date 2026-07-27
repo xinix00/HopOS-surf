@@ -1,10 +1,11 @@
 // Launcher is het startmenu — sinds 20-07 een scene-app (P2): de catalogus
 // reist één keer als boom, een klik komt semantisch terug en een status-
 // wissel is een PATCH van de knoptekst. De catalogus komt uit de boot-config
-// (hopos.apps[]) via de HOPOS_APPS-env, met {{host}} al vervangen door het
-// node-IP; klik = start (POST /v1/jobs), klik op een draaiende = stop
-// (DELETE). Zet display + launcher in hopos.init[] en de node boot een
-// bruikbare desktop (zie hop-os docs/config.md).
+// (hopos.apps[]) via de HOPOS_APPS-env, letterlijk doorgegeven — adressen
+// hoeven er niet in (elke app vindt zijn display en agent zelf, surf.Addr);
+// klik = start (POST /v1/jobs), klik op een draaiende = stop (DELETE). Zet
+// display + launcher in hopos.init[] en de node boot een bruikbare desktop
+// (zie hop-os docs/config.md).
 package main
 
 import (
@@ -35,15 +36,16 @@ func main() {
 		app.Logf("net: %v", err)
 		app.Exit(1)
 	}
-	addr := app.Env("SURF_ADDR")
+	addr := surf.Addr(app.Env) // SURF_ADDR, anders de eigen node (HOPOS_HOST:7878)
 	if addr == "" {
-		app.Logf("launcher: SURF_ADDR not set (want <display-node>:7878)")
+		app.Logf("launcher: SURF_ADDR not set and no HOPOS_HOST (want <display-node>:7878)")
 		app.Exit(1)
 	}
+	// De agent woont op élke node op het vaste interne adres; HOP_ADDR is
+	// alleen nodig om een ándere node aan te wijzen.
 	hopAddr := app.Env("HOP_ADDR")
 	if hopAddr == "" {
-		app.Logf("launcher: HOP_ADDR not set (want <node>:8080)")
-		app.Exit(1)
+		hopAddr = "10.100.0.1:8080"
 	}
 	if !strings.Contains(hopAddr, "://") {
 		hopAddr = "http://" + hopAddr

@@ -14,6 +14,7 @@ import (
 
 	"github.com/xinix00/hop-os-surf/app/calc"
 	"github.com/xinix00/hop-os-surf/stack/scene"
+	"github.com/xinix00/hop-os-surf/stack/surf"
 )
 
 func main() {
@@ -23,9 +24,9 @@ func main() {
 		app.Logf("net: %v", err)
 		app.Exit(1)
 	}
-	addr := app.Env("SURF_ADDR")
+	addr := surf.Addr(app.Env) // SURF_ADDR, anders de eigen node (HOPOS_HOST:7878)
 	if addr == "" {
-		app.Logf("calc: SURF_ADDR not set (want <display-node>:7878)")
+		app.Logf("calc: SURF_ADDR not set and no HOPOS_HOST (want <display-node>:7878)")
 		app.Exit(1)
 	}
 

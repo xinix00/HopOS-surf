@@ -74,6 +74,22 @@ type Header struct {
 	Length  uint32
 }
 
+// Addr geeft het display-adres voor een window-app: SURF_ADDR uit de jobspec
+// als die er is (cross-node: een hopdns-naam of expliciet adres), en anders
+// de gepubliceerde SURF-poort op de éigen node — HOPOS_HOST krijgt elk slot
+// van HopOS mee, en de switch legt een gesprek met het eigen node-IP intern
+// om (hairpin, 27-07). Zo heeft de standaardconfig (display + apps op één
+// node) geen SURF_ADDR-regel meer nodig. Leeg = geen van beide gezet.
+func Addr(env func(string) string) string {
+	if a := env("SURF_ADDR"); a != "" {
+		return a
+	}
+	if h := env("HOPOS_HOST"); h != "" {
+		return fmt.Sprintf("%s:%d", h, Port)
+	}
+	return ""
+}
+
 func putHeader(b []byte, typ uint8, surface uint16, length uint32) {
 	b[0] = typ
 	b[1] = 0

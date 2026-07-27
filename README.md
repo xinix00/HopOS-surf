@@ -33,8 +33,8 @@ GUI code. Design dossier (the negotiated source of truth, Dutch):
 | `cmd/calc` | scene app: the display renders the keypad, every keypress is one PATCH of the display value |
 | `cmd/browser` | a real web browser (pixel app): `browse/` fetches, parses and lays out (`SURF_HOME` = start page) |
 | `cmd/dash` | the P2 proof app: a dashboard that measures and shows its own wire traffic |
-| `cmd/taskman` | the cluster watching itself: agents → jobs → tasks → live logs (SSE), each log line one PATCH (`HOP_ADDR=<node>:8080`, `HOP_KEY` = cluster API key, empty = no auth) |
-| `cmd/launcher` | the desktop starting itself: buttons from `HOPOS_APPS` (the `hopos.apps[]` boot-config catalog, `{{host}}` resolved by HopOS — see HopOS `docs/config.md`); click starts, click again stops |
+| `cmd/taskman` | the cluster watching itself: agents → jobs → tasks → live logs (SSE), each log line one PATCH (`HOP_KEY` = cluster API key, empty = no auth) |
+| `cmd/launcher` | the desktop starting itself: buttons from `HOPOS_APPS` (the `hopos.apps[]` boot-config catalog — see HopOS `docs/config.md`); click starts, click again stops |
 
 ## Build & test
 
@@ -47,7 +47,10 @@ app builds, and a checkout of HopOS **v1.5.1 or newer** next to this repo
 (`../hop-os` — see the replace lines in `go.mod`; v1.5.1 is the first with the
 `apphttp` server the display runs on). Artifacts land in `out/display.elf` and
 `out/clock.elf`; submit them as HopOS jobs (see HopOS `docs/app.md`). The
-clock finds its display through the job-spec env `SURF_ADDR=<display-node>:7878`.
+clock finds its display on its own node by default (`HOPOS_HOST:7878` — the
+published SURF port, hairpinned internally by HopOS) and the API clients
+default to the local agent (`10.100.0.1:8080`); set `SURF_ADDR` or `HOP_ADDR`
+in the job spec only to point at *another* node (a hopdns name or an address).
 
 ### No TLS in an app that never speaks https
 

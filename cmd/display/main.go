@@ -48,9 +48,15 @@ func main() {
 	// de app sterft, HOP ziet een dode task en herstart hem — het window komt
 	// terug en je krijgt het niet dicht (Derek 27-07). Dus verwijdert de display
 	// de job; de launcher heeft hem nog in zijn catalogus, dus één klik en hij
-	// draait weer. Zonder HOP_ADDR (los draaiend, geen orchestrator) blijft het
-	// oude gedrag: window weg, verder niets.
-	if addr := app.Env("HOP_ADDR"); addr != "" {
+	// draait weer. De agent woont op élke node op het vaste interne adres, dus
+	// HOP_ADDR is alleen nodig om een ándere node aan te wijzen (op een node
+	// met hopos.apikey moet er wel een HOP_KEY bij, anders weigert de agent
+	// de DELETE — dat logt hieronder luid).
+	addr := app.Env("HOP_ADDR")
+	if addr == "" {
+		addr = "10.100.0.1:8080"
+	}
+	{
 		if !strings.Contains(addr, "://") {
 			addr = "http://" + addr
 		}
