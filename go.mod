@@ -7,7 +7,7 @@ require (
 	github.com/tdewolff/canvas v0.0.0-20260714230319-248e24504c3b
 	golang.org/x/image v0.44.0
 	golang.org/x/net v0.55.0
-	hop-os/metal v1.5.1
+	hop-os/metal v1.5.3
 )
 
 require (
