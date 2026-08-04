@@ -2,13 +2,20 @@ module github.com/xinix00/hop-os-surf
 
 go 1.26.4
 
+// GitHub is in de lead: metal komt als echte metal/vX-tag van HopOS.git
+// (metal is daar een submap, dus zijn tags heten metal/vX.Y.Z). Geen replace —
+// wijzigingen in hop-os bereiken surf via een nieuwe tag, nooit via een pad
+// op iemands Mac. Wie deze repo clonet bouwt zonder meer.
+//
+// De witregel hieronder is dracht: een comment die aan een require-blok
+// vastzit (of erin staat) maakt het blok niet-canoniek voor cmd/go's
+// go.mod-herschrijver, en die verbouwt dan élke build de blokstructuur —
+// een pad waarin de (tamago-)toolchain sporadisch panict (x/mod modfile,
+// "index out of range"). Los CommentBlock = schoon require-blok = no-op.
+
 require (
 	github.com/andybalholm/cascadia v1.3.4
 	github.com/tdewolff/canvas v0.0.0-20260714230319-248e24504c3b
-	// GitHub is in de lead: een echte metal/vX-tag op HopOS.git (metal is
-	// daar een submap, dus zijn tags heten metal/vX.Y.Z). Geen replace —
-	// wijzigingen in hop-os bereiken surf via een nieuwe tag, nooit via een
-	// pad op iemands Mac. Wie deze repo clonet bouwt zonder meer.
 	github.com/xinix00/HopOS/metal v1.8.3
 	golang.org/x/image v0.44.0
 	golang.org/x/net v0.55.0
