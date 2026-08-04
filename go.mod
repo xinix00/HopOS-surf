@@ -7,7 +7,7 @@ require (
 	github.com/tdewolff/canvas v0.0.0-20260714230319-248e24504c3b
 	golang.org/x/image v0.44.0
 	golang.org/x/net v0.55.0
-	hop-os/metal v1.5.4
+	hop-os/metal v1.8.2
 )
 
 require (
@@ -42,16 +42,15 @@ require (
 	star-tex.org/x/tex v0.7.1 // indirect
 )
 
-// hop-os/metal is (nog) geen fetchbare module: lokaal naast deze repo. De
-// versie hierboven is daarom geen resolutie maar een ondergrens op papier —
-// v1.5.1 is de eerste met apphttp.Serve/Do, waar display, taskman en launcher
-// op draaien. Een oudere checkout naast deze repo compileert niet.
-//
-// Zijn replaces gelden niet transitief, dus hier herhaald (zelfde paden als
-// in hop-os/metal/go.mod).
+// Alles van ons komt van GitHub — echte versies, geen paden op deze Mac, dus
+// een verse clone bouwt ook bij iemand anders. Twee modules heten intern nog
+// niet naar hun repo-URL (`module hop`, `module hop-os/metal`); zolang dat zo
+// is verlegt een replace alleen de bron, het mirror-patroon (zoals
+// golang.org/x/* => github.com/golang/*) — de versie erachter is de echte
+// pin. Metal is een submap van HopOS.git en versioneert dus via metal/vX-tags.
+// hoplock en hoplockserver komen transitief via metal en hebben geen replace
+// meer nodig.
 replace (
-	github.com/xinix00/hoplock => /Users/derek/haaslock
-	github.com/xinix00/hoplockserver => /Users/derek/Git/easy/hoplockserver
-	hop => /Users/derek/Git/easy/hop
-	hop-os/metal => ../hop-os/metal
+	hop => github.com/xinix00/hop v0.20.10
+	hop-os/metal => github.com/xinix00/HopOS/metal v1.8.2
 )
