@@ -2,3 +2,4 @@ out/
 *.elf
 *.elf.gz
 .DS_Store
+mario.gbc

@@ -15,6 +15,8 @@ import (
 	"log"
 	"net"
 	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 
 	"github.com/xinix00/hop-os-surf/app/browse"
@@ -95,8 +97,40 @@ func runLauncher(surfAddr string, logf func(string, ...any)) {
 			conn := scene.Open(surfAddr, title, 240, 320, logf)
 			go func() { logf("calc: %v", calc.Drive(conn, logf)); doneC <- id }()
 		},
+		"goboy": func(id int, title string) {
+			// De eerste port (apps/ports/goboy) is een eigen module en start
+			// daarom als subprocess — zoals hij op het cluster een eigen job
+			// is; het window komt toch via SURF binnen. Vergt een gedraaide
+			// tools/prepare-goboy.sh en de desktop in de repo-wortel. De ROM
+			// komt uit GOBOY_ROM (pad op de host), anders blargg's testcart
+			// uit de upstream-checkout.
+			rom := os.Getenv("GOBOY_ROM")
+			if rom == "" {
+				// roms/ is de cartridge-la van de port (gitignored: images
+				// gaan nooit mee online): alfabetisch de eerste .gb/.gbc,
+				// en zonder cartridge blargg's testcart uit de upstream-
+				// checkout. GOBOY_ROM wint altijd.
+				if m, _ := filepath.Glob("apps/ports/goboy/roms/*.gb*"); len(m) > 0 {
+					rom = m[0]
+				} else {
+					rom = "apps/ports/goboy/build/goboy-latest/roms/blargg/cpu_instrs.gb"
+				}
+			}
+			if abs, err := filepath.Abs(rom); err == nil {
+				rom = abs // het subprocess draait in de port-map, niet in de desktop-cwd
+			}
+			cmd := exec.Command("go", "run", "./cmd/goboy-hopos", "-surf", surfAddr, rom)
+			cmd.Dir = "apps/ports/goboy"
+			cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr
+			go func() {
+				if err := cmd.Run(); err != nil {
+					logf("goboy: %v (prepare-goboy.sh gedraaid? desktop in de repo-wortel gestart?)", err)
+				}
+				doneC <- id
+			}()
+		},
 	}
-	apps := []launcher.App{{Name: "clock"}, {Name: "browser"}, {Name: "calc"}}
+	apps := []launcher.App{{Name: "clock"}, {Name: "browser"}, {Name: "calc"}, {Name: "goboy"}}
 
 	conn := scene.Open(surfAddr, "launcher @ host", 320, 420, logf)
 	conn.Role = surf.RoleMenu

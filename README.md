@@ -35,6 +35,7 @@ GUI code. Design dossier (the negotiated source of truth, Dutch):
 | `cmd/dash` | the P2 proof app: a dashboard that measures and shows its own wire traffic |
 | `cmd/taskman` | the cluster watching itself: agents → jobs → tasks → live logs (SSE), each log line one PATCH (`HOP_KEY` = cluster API key, empty = no auth) |
 | `cmd/launcher` | the desktop starting itself: buttons from `HOPOS_APPS` (the `hopos.apps[]` boot-config catalog — see HopOS `docs/config.md`); click starts, click again stops |
+| `apps/ports/goboy` | the first **port**: humpheh/goboy (a GameBoy emulator) as a slot app — own module, upstream pulled at latest by a prepare script, zero lines forked (see its README) |
 
 ## Build & test
 

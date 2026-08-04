@@ -1,0 +1,5 @@
+build/
+out/
+# De cartridge-la: ROM-images zijn van jou en gaan nooit mee online.
+roms/
+*.sav
