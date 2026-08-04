@@ -67,8 +67,8 @@ github.com/usbarmory/go-net v0.0.0-20260626130943-dad9ef39fd9b h1:QOgzNwGI3ZFJzr
 github.com/usbarmory/go-net v0.0.0-20260626130943-dad9ef39fd9b/go.mod h1:buOhhKgCq3hxLvQ3QUMVHZy5XKcxFcx4zjOgGc2PEas=
 github.com/usbarmory/tamago v1.26.4 h1:laFvRANKgVYFHxLHjIlhqJCc3Xm+qMyab2SlUoNw6zY=
 github.com/usbarmory/tamago v1.26.4/go.mod h1:HZkb+ZkzFl8aCxAuF7exsKX+XaNM0mYG9Iv7ooX1WDY=
-github.com/xinix00/HopOS/metal v1.8.3 h1:ovJnU3fgyibt0xpBHTslXZkvsmzpiLkMFgyW0kyKejQ=
-github.com/xinix00/HopOS/metal v1.8.3/go.mod h1:KFjSKHg7xyhrYpeJ22eeFR4t0g+VO+9sVidlxbrWR5o=
+github.com/xinix00/HopOS/metal v1.8.4 h1:3XhR+e0C/ISDScZJT20ynz9+/98hZ6DbqYjlB2Ch6Yw=
+github.com/xinix00/HopOS/metal v1.8.4/go.mod h1:rCXjYzDj1MpYGR4PlyYrCf9gcljviP4mwXk3R5ZElvc=
 github.com/xyproto/randomstring v1.0.5 h1:YtlWPoRdgMu3NZtP45drfy1GKoojuR7hmRcnhZqKjWU=
 github.com/xyproto/randomstring v1.0.5/go.mod h1:rgmS5DeNXLivK7YprL0pY+lTuhNQW3iGxZ18UQApw/E=
 github.com/yuin/goldmark v1.8.2 h1:kEGpgqJXdgbkhcOgBxkC0X0PmoPG1ZyoZ117rDVp4zE=
