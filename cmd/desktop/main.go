@@ -29,7 +29,7 @@ import (
 	"github.com/xinix00/hop-os-surf/stack/surf"
 	"github.com/xinix00/hop-os-surf/stack/surfserve"
 	"github.com/xinix00/hop-os-surf/stack/window"
-	"hop-os/metal/app/applib/apphttp"
+	"github.com/xinix00/HopOS/metal/app/applib/apphttp"
 )
 
 func main() {

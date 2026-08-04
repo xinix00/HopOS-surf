@@ -14,7 +14,7 @@ import (
 	"unsafe"
 
 	"github.com/xinix00/hop-os-surf/stack/compositor"
-	"hop-os/metal/app/applib"
+	"github.com/xinix00/HopOS/metal/app/applib"
 )
 
 type fbTarget struct {

@@ -5,9 +5,13 @@ go 1.26.4
 require (
 	github.com/andybalholm/cascadia v1.3.4
 	github.com/tdewolff/canvas v0.0.0-20260714230319-248e24504c3b
+	// GitHub is in de lead: een echte metal/vX-tag op HopOS.git (metal is
+	// daar een submap, dus zijn tags heten metal/vX.Y.Z). Geen replace —
+	// wijzigingen in hop-os bereiken surf via een nieuwe tag, nooit via een
+	// pad op iemands Mac. Wie deze repo clonet bouwt zonder meer.
+	github.com/xinix00/HopOS/metal v1.8.3
 	golang.org/x/image v0.44.0
 	golang.org/x/net v0.55.0
-	hop-os/metal v1.8.2
 )
 
 require (
@@ -40,17 +44,4 @@ require (
 	modernc.org/knuth v0.5.5 // indirect
 	modernc.org/token v1.1.0 // indirect
 	star-tex.org/x/tex v0.7.1 // indirect
-)
-
-// Alles van ons komt van GitHub — echte versies, geen paden op deze Mac, dus
-// een verse clone bouwt ook bij iemand anders. Twee modules heten intern nog
-// niet naar hun repo-URL (`module hop`, `module hop-os/metal`); zolang dat zo
-// is verlegt een replace alleen de bron, het mirror-patroon (zoals
-// golang.org/x/* => github.com/golang/*) — de versie erachter is de echte
-// pin. Metal is een submap van HopOS.git en versioneert dus via metal/vX-tags.
-// hoplock en hoplockserver komen transitief via metal en hebben geen replace
-// meer nodig.
-replace (
-	hop => github.com/xinix00/hop v0.20.10
-	hop-os/metal => github.com/xinix00/HopOS/metal v1.8.2
 )

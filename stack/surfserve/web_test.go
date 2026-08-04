@@ -10,7 +10,7 @@ import (
 	"net"
 	"testing"
 
-	"hop-os/metal/app/applib/apphttp"
+	"github.com/xinix00/HopOS/metal/app/applib/apphttp"
 )
 
 type webTest struct {

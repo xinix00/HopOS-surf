@@ -12,8 +12,8 @@ package main
 import (
 	"fmt"
 
-	"hop-os/metal/app/applib"
-	"hop-os/metal/app/applib/appnet"
+	"github.com/xinix00/HopOS/metal/app/applib"
+	"github.com/xinix00/HopOS/metal/app/applib/appnet"
 
 	"github.com/xinix00/hop-os-surf/app/browse"
 	"github.com/xinix00/hop-os-surf/stack/surf"

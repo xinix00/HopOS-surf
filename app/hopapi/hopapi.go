@@ -25,7 +25,7 @@ import (
 	"sync"
 	"time"
 
-	"hop-os/metal/app/applib/apphttp"
+	"github.com/xinix00/HopOS/metal/app/applib/apphttp"
 )
 
 // Agent is één geregistreerde node (GET /v1/agents).

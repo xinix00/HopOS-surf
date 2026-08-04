@@ -15,9 +15,9 @@ import (
 	"github.com/xinix00/hop-os-surf/stack/compositor"
 	"github.com/xinix00/hop-os-surf/stack/surf"
 	"github.com/xinix00/hop-os-surf/stack/surfserve"
-	"hop-os/metal/app/applib"
-	"hop-os/metal/app/applib/apphttp"
-	"hop-os/metal/app/applib/appnet"
+	"github.com/xinix00/HopOS/metal/app/applib"
+	"github.com/xinix00/HopOS/metal/app/applib/apphttp"
+	"github.com/xinix00/HopOS/metal/app/applib/appnet"
 )
 
 func main() {

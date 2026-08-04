@@ -21,7 +21,7 @@ import (
 
 	"github.com/xinix00/hop-os-surf/stack/compositor"
 	"github.com/xinix00/hop-os-surf/stack/surf"
-	"hop-os/metal/app/applib/apphttp"
+	"github.com/xinix00/HopOS/metal/app/applib/apphttp"
 )
 
 // orphanGrace: hoe lang een window zonder verbinding blijft staan. Ruim
