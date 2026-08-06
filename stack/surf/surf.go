@@ -47,36 +47,11 @@ const (
 	// gekilde slot stuurt nooit een FIN; zonder pings blijft zijn window
 	// eeuwig staan (gemeten 19-07). Clients pingen elke ~10s, de display
 	// ruimt sessies op die >30s niets sturen.
-
-	// TypeMap (app→disp, gui-ontwerp P3): "mijn vensterbuffer staat op dit
-	// adres, lees hem daar" — in plaats van elke frame de pixels te sturen.
-	//
-	// Dit werkt alleen LOKAAL: het adres is een IPA in de kooi van de display
-	// en dat bestaat alleen als app en display op dezelfde node draaien en
-	// HopOS de grant verleend heeft. Eén protocol, twee transports (zoals het
-	// ontwerp het stelt): een app op een andere node stuurt gewoon pixels, en
-	// dat pad verdwijnt nooit. Een client PROBEERT te mappen en valt bij elke
-	// fout stil terug — er is geen onderhandeling en geen versievlag nodig.
-	//
-	// Na een MAP dragen de DAMAGE-berichten van die surface alleen nog de
-	// rechthoek en geen pixels meer.
-	TypeMap = 12
 )
 
-// FormatXRGB8888 is het v0-pixelformaat OP DE DRAAD: 4 bytes per pixel,
+// FormatXRGB8888 is het enige v0-pixelformaat: 4 bytes per pixel,
 // little-endian 0xXXRRGGBB → bytes B,G,R,X.
 const FormatXRGB8888 = 1
-
-// FormatRGBA8888 is het formaat van een GEDEELDE buffer (TypeMap): bytes
-// R,G,B,A — de volgorde van image.RGBA, aan beide kanten.
-//
-// Bewust anders dan de draad. Op een socket is XRGB de afspraak omdat er hoe
-// dan ook gekopieerd wordt en het formaat dan een keuze is; in gedeeld geheugen
-// wordt er níet gekopieerd, dus hoort de layout die te zijn waar beide kanten
-// al mee werken. De app tekent in een image.RGBA en de compositor buffert in
-// RGBA — daartussen een swap leggen zou de winst van het delen deels weer
-// weggeven.
-const FormatRGBA8888 = 2
 
 // Input-kinds (INPUT.Kind). De browser-KVM, UART en straks de USB-HID-app
 // leveren allemaal ditzelfde bericht — de bron is inwisselbaar.
@@ -142,27 +117,16 @@ func WriteDamage(w io.Writer, surface uint16, d Damage, pix []byte) error {
 		return fmt.Errorf("surf: damage %dx%d wants %d pixel bytes, got %d",
 			d.W, d.H, int(d.W)*int(d.H)*4, len(pix))
 	}
-	if DamageMetaSize+len(pix) > MaxPayload {
+	if damageMetaSize+len(pix) > MaxPayload {
 		return ErrTooLarge
 	}
-	head := make([]byte, HeaderSize+DamageMetaSize)
-	putHeader(head, TypeDamage, surface, uint32(DamageMetaSize+len(pix)))
+	head := make([]byte, HeaderSize+damageMetaSize)
+	putHeader(head, TypeDamage, surface, uint32(damageMetaSize+len(pix)))
 	d.encode(head[HeaderSize:])
 	if _, err := w.Write(head); err != nil {
 		return err
 	}
 	_, err := w.Write(pix)
-	return err
-}
-
-// WriteDamageMeta schrijft een DAMAGE zonder pixels: voor een GEDEELDE buffer
-// (TypeMap) staan die er al. Eén kleine write per rechthoek in plaats van een
-// kop plus megabytes.
-func WriteDamageMeta(w io.Writer, surface uint16, d Damage) error {
-	buf := make([]byte, HeaderSize+DamageMetaSize)
-	putHeader(buf, TypeDamage, surface, DamageMetaSize)
-	d.encode(buf[HeaderSize:])
-	_, err := w.Write(buf)
 	return err
 }
 
@@ -278,10 +242,7 @@ type Damage struct {
 	X, Y, W, H uint16
 }
 
-// DamageMetaSize is de vaste meta-kop van een DAMAGE-payload. Een GEMAPTE
-// surface stuurt precies dit en geen byte meer: de pixels staan al in de
-// gedeelde buffer. De lengte is daarmee het onderscheid tussen de twee wegen.
-const DamageMetaSize = 12
+const damageMetaSize = 12
 
 func (m Damage) encode(b []byte) {
 	binary.LittleEndian.PutUint32(b, m.Frame)
@@ -291,70 +252,10 @@ func (m Damage) encode(b []byte) {
 	binary.LittleEndian.PutUint16(b[10:], m.H)
 }
 
-// DecodeDamageMeta leest alleen de rechthoek. Voor een GEMAPTE surface: de
-// pixels staan al in de buffer die de display leest, dus het bericht draagt er
-// geen. Een payload die tóch pixels bevat is een client die zich niet aan de
-// afspraak houdt — dat hoort te vallen, niet genegeerd te worden.
-func DecodeDamageMeta(p []byte) (Damage, error) {
-	if len(p) < DamageMetaSize {
-		return Damage{}, ErrShort
-	}
-	if len(p) != DamageMetaSize {
-		return Damage{}, fmt.Errorf("surf: mapped damage carries %d pixel bytes, want 0", len(p)-DamageMetaSize)
-	}
-	return Damage{
-		Frame: binary.LittleEndian.Uint32(p),
-		X:     binary.LittleEndian.Uint16(p[4:]),
-		Y:     binary.LittleEndian.Uint16(p[6:]),
-		W:     binary.LittleEndian.Uint16(p[8:]),
-		H:     binary.LittleEndian.Uint16(p[10:]),
-	}, nil
-}
-
-// Map: ipa u64 | w u16 | h u16 | stride u32 | format u8.
-//
-// IPA is het adres waarop de DISPLAY de buffer ziet — de app kreeg dat getal
-// van HopOS terug bij zijn grant en weet zelf niet waar het in de kooi van de
-// display uitkomt. De display toetst het (applib.ViewSurface) vóór hij er ook
-// maar naar kijkt: dit is een getal uit een ander proces.
-type Map struct {
-	IPA    uint64
-	W, H   uint16
-	Stride uint32
-	Format uint8
-}
-
-const mapSize = 17
-
-// Encode serialiseert een MAP-payload.
-func (m Map) Encode() []byte {
-	b := make([]byte, mapSize)
-	binary.LittleEndian.PutUint64(b, m.IPA)
-	binary.LittleEndian.PutUint16(b[8:], m.W)
-	binary.LittleEndian.PutUint16(b[10:], m.H)
-	binary.LittleEndian.PutUint32(b[12:], m.Stride)
-	b[16] = m.Format
-	return b
-}
-
-// DecodeMap parseert een MAP-payload.
-func DecodeMap(p []byte) (Map, error) {
-	if len(p) < mapSize {
-		return Map{}, ErrShort
-	}
-	return Map{
-		IPA:    binary.LittleEndian.Uint64(p),
-		W:      binary.LittleEndian.Uint16(p[8:]),
-		H:      binary.LittleEndian.Uint16(p[10:]),
-		Stride: binary.LittleEndian.Uint32(p[12:]),
-		Format: p[16],
-	}, nil
-}
-
 // DecodeDamage splitst een DAMAGE-payload in meta + pixelbytes en valideert
 // dat de pixellengte bij de rechthoek past.
 func DecodeDamage(p []byte) (Damage, []byte, error) {
-	if len(p) < DamageMetaSize {
+	if len(p) < damageMetaSize {
 		return Damage{}, nil, ErrShort
 	}
 	m := Damage{
@@ -364,7 +265,7 @@ func DecodeDamage(p []byte) (Damage, []byte, error) {
 		W:     binary.LittleEndian.Uint16(p[8:]),
 		H:     binary.LittleEndian.Uint16(p[10:]),
 	}
-	pix := p[DamageMetaSize:]
+	pix := p[damageMetaSize:]
 	if len(pix) != int(m.W)*int(m.H)*4 {
 		return Damage{}, nil, fmt.Errorf("surf: damage %dx%d wants %d pixel bytes, got %d",
 			m.W, m.H, int(m.W)*int(m.H)*4, len(pix))

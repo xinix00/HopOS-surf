@@ -15,18 +15,12 @@
 // Damage op een verouderde maat wordt stil gedropt.
 //
 // Pixelmodel: surfaces bufferen intern in RGBA-bytevolgorde (zoals
-// image.RGBA); de draad levert XRGB8888 little-endian (B,G,R,X). Compose is
-// daarna pure rij-kopie. De swap zit op één plek per soort surface:
-//
-//   - normaal (pixels over de socket): in Damage, bij het binnenkomen;
-//   - gemapt (HopOS surface-grant, gui-ontwerp P3): in PresentRects, want daar
-//     lezen we de buffer van de app zelf — die staat in wire-formaat en er is
-//     geen back-buffer meer om hem in te converteren. Zie Surface.Map.
+// image.RGBA); de draad levert XRGB8888 little-endian (B,G,R,X). De enige
+// swap zit in Damage — compose is daarna pure rij-kopie.
 package compositor
 
 import (
 	"errors"
-	"fmt"
 	"image"
 	"image/color"
 	"sync"
@@ -67,20 +61,9 @@ type Surface struct {
 
 	mu        sync.Mutex
 	w, h      int
-	back      []byte // RGBA-bytes, stride = w*4 — nil zodra ext gezet is
+	back      []byte // RGBA-bytes, stride = w*4
 	front     []byte
 	presented bool // er is ooit een PRESENT geweest (anders: leeg vlak tonen)
-
-	// ext is de buffer van de APP ZELF, read-only in ons gemapt (HopOS
-	// surface-grant, gui-ontwerp P3). Is hij gezet, dan is back nil: de app
-	// tekent rechtstreeks in wat wij lezen, dus er is geen tweede kopie van
-	// deze pixels meer in DRAM en er gaat geen pixel over de socket.
-	//
-	// Wire-formaat (XRGB8888), niet RGBA — de app schrijft nu eenmaal wat hij
-	// anders verstuurd zou hebben. De conversie is daarmee verhuisd: hij zat in
-	// Damage (per binnengekomen bericht) en zit nu in PresentRects (per
-	// zichtbaar gemaakte rechthoek). Even vaak, alleen op een ander moment.
-	ext []byte
 
 	// WM-staat; alleen onder Compositor.mu gelezen/geschreven.
 	hintW, hintH int             // de CREATE-wens
@@ -103,25 +86,11 @@ func (s *Surface) Size() (w, h int) {
 // frame op een verouderde maat, geen fout (de CONFIGURE is al onderweg).
 // Een pixellengte die niet bij de rechthoek past is wél corruptie.
 func (s *Surface) Damage(x, y, w, h int, wire []byte) error {
-	if w <= 0 || h <= 0 {
-		return errors.New("compositor: damage rectangle empty")
+	if w <= 0 || h <= 0 || len(wire) != w*h*4 {
+		return errors.New("compositor: damage pixel length mismatch")
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	// Gemapte surface: de pixels stáán er al — de app schreef ze zelf in de
-	// buffer die wij lezen. Het DAMAGE-bericht draagt dan alleen de rechthoek,
-	// en de conversie gebeurt bij Present. Een client die er tóch pixels bij
-	// stuurt heeft een verkeerd beeld van de afspraak; dat is een fout, geen
-	// veld om te negeren.
-	if s.ext != nil {
-		if len(wire) != 0 {
-			return errors.New("compositor: mapped surface got pixel payload")
-		}
-		return nil
-	}
-	if len(wire) != w*h*4 {
-		return errors.New("compositor: damage pixel length mismatch")
-	}
 	if x < 0 || y < 0 || x+w > s.w || y+h > s.h {
 		return nil // verouderde maat: droppen
 	}
@@ -139,52 +108,6 @@ func (s *Surface) Damage(x, y, w, h int, wire []byte) error {
 	return nil
 }
 
-// Map laat deze surface zijn pixels lezen uit ext — de vensterbuffer van de app
-// zelf, die HopOS read-only in ons heeft gemapt (applib.ViewSurface).
-//
-// Vanaf hier is er geen back-buffer meer voor dit window: die wordt vrijgegeven
-// en de GC ruimt hem op. Dat is de hele winst — bij zes vensters op 1080p
-// scheelde dat de display precies de megabytes waar hij 06-08 op omviel.
-//
-// ext staat in RGBA (stride w*4), NIET in het wire-formaat XRGB8888. Dat is
-// geen slordigheid maar het punt: gedeeld geheugen is geen draad. De app tekent
-// in een image.RGBA waarvan dit de Pix is, en wij kopiëren rijen naar front —
-// dus de byteswap die de socket-weg aan béide kanten kost, bestaat hier niet.
-// Twee conversies weg, niet één.
-//
-// Klopt de maat niet, dan blijft alles zoals het was: liever de oude (werkende)
-// pixelweg dan een venster dat buiten zijn buffer leest.
-func (s *Surface) Map(ext []byte, w, h int) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if w != s.w || h != s.h {
-		return fmt.Errorf("compositor: map is %dx%d, surface is %dx%d", w, h, s.w, s.h)
-	}
-	if len(ext) < w*h*4 {
-		return fmt.Errorf("compositor: map has %d bytes, needs %d", len(ext), w*h*4)
-	}
-	s.ext = ext[:w*h*4]
-	s.back = nil
-	return nil
-}
-
-// Unmap zet de surface terug op zijn eigen back-buffer. Nodig zodra de grant
-// niet meer geldig is — de app is weg, of hij is van maat veranderd.
-func (s *Surface) Unmap() {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.unmapLocked()
-}
-
-func (s *Surface) unmapLocked() {
-	if s.ext == nil {
-		return
-	}
-	s.ext = nil
-	s.back = make([]byte, s.w*s.h*4)
-	copy(s.back, s.front) // wat er stond blijft staan tot het eerste nieuwe frame
-}
-
 // resize legt een nieuwe WM-maat op; de overlap van het oude beeld blijft
 // staan (geen zwart gat terwijl de app naar de nieuwe maat onderweg is).
 func (s *Surface) resize(w, h int) {
@@ -193,11 +116,6 @@ func (s *Surface) resize(w, h int) {
 	if w == s.w && h == s.h {
 		return
 	}
-	// Een grant hoort bij één maat: de buffer van de app is precies zo groot
-	// als zijn venster was. Bij een resize is hij dus per definitie ongeldig —
-	// terug naar de eigen back-buffer, en de app mapt opnieuw wanneer hij op de
-	// nieuwe maat tekent (hij krijgt zo meteen een CONFIGURE).
-	s.unmapLocked()
 	back := make([]byte, w*h*4)
 	front := make([]byte, w*h*4)
 	// Nieuw gebied vooraf vullen met het content-vlak (opaak!): zero-bytes
@@ -491,19 +409,10 @@ func (c *Compositor) PresentRects(s *Surface, rects []image.Rectangle) {
 		if r.Empty() {
 			continue
 		}
-		// Gemapt of niet: dezelfde rij-kopie. De gemapte bron is het RAM van
-		// de app zelf (read-only in twee lagen), en die staat al in RGBA —
-		// zie Surface.Map voor waarom dat géén wire-formaat is. Dat de app
-		// halverwege een frame kan zitten is precies waarom er nog een front
-		// is: wat de compositor toont is altijd een afgemaakt frame.
-		src := s.back
-		if s.ext != nil {
-			src = s.ext
-		}
 		w := r.Dx() * 4
 		for y := r.Min.Y; y < r.Max.Y; y++ {
 			off := (y*s.w + r.Min.X) * 4
-			copy(s.front[off:off+w], src[off:off+w])
+			copy(s.front[off:off+w], s.back[off:off+w])
 		}
 		clipped = append(clipped, r)
 	}
