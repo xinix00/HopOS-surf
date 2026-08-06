@@ -90,6 +90,15 @@ func main() {
 		// overlay direct op de framebuffer — nooit in de compositie (§5).
 		srv.OnPointer(fb.CursorTo)
 		app.Logf("display: fb grant %dx%d stride %d at %#x", fb.w, fb.h, fb.stride, fb.base)
+
+		// Toetsenbord en muis komen met dezelfde grant mee: HopOS bezit de
+		// USB-controller en serveert de rapporten als stroom op INPUT_ADDR.
+		// Alleen zinvol mét glas — een display zonder framebuffer kijkt niet
+		// naar het scherm waar dat toetsenbord bij hoort.
+		if in := app.Env("INPUT_ADDR"); in != "" {
+			go srv.ConsumeInput(in)
+			app.Logf("display: physical keyboard/mouse from %s", in)
+		}
 	}
 
 	httpPort := app.Env("ER_PORT_HTTP")
