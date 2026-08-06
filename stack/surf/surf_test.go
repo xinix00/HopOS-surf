@@ -108,7 +108,7 @@ func TestGuards(t *testing.T) {
 	}
 	// Damage met pixellengte die niet bij de rechthoek past.
 	bad := (Damage{W: 2, H: 2}) // 16 bytes verwacht
-	var meta [damageMetaSize]byte
+	var meta [DamageMetaSize]byte
 	bad.encode(meta[:])
 	if _, _, err := DecodeDamage(append(meta[:], make([]byte, 8)...)); err == nil {
 		t.Fatal("mismatched damage size must error")

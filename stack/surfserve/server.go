@@ -19,9 +19,10 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/xinix00/hop-os-surf/stack/compositor"
-	"github.com/xinix00/hop-os-surf/stack/surf"
 	"github.com/xinix00/HopOS/metal/app/applib/apphttp"
+	"github.com/xinix00/hop-os-surf/stack/compositor"
+	"github.com/xinix00/hop-os-surf/stack/shm"
+	"github.com/xinix00/hop-os-surf/stack/surf"
 )
 
 // orphanGrace: hoe lang een window zonder verbinding blijft staan. Ruim
@@ -426,10 +427,39 @@ func (s *Server) handle(conn net.Conn) {
 					surf.Configure{W: uint16(w), H: uint16(hh)}.Encode())
 				s.logf("surf: %s terug — window geadopteerd", sess.app)
 			}
+		case surf.TypeMap:
+			// De app deelt zijn vensterbuffer met ons (HopOS surface-grant,
+			// gui-ontwerp P3): vanaf nu dragen zijn DAMAGE-berichten alleen nog
+			// rechthoeken. Mislukt dat — geen grant op deze node, een app op een
+			// ándere node, een RISC-V-kooi, een adres dat niet klopt — dan is dat
+			// GEEN reden de sessie te verbreken: de pixelweg werkt gewoon en
+			// blijft bestaan. Alleen loggen.
+			s.mapSurface(sess, h.Surface, buf)
+
 		case surf.TypeDamage:
-			d, pix, err := surf.DecodeDamage(buf)
 			sur := sess.get(h.Surface)
-			if err != nil || sur == nil {
+			if sur == nil {
+				s.logf("surf: %s: DAMAGE for unknown surface %d", sess.app, h.Surface)
+				return
+			}
+			// Een gemapte surface stuurt geen pixels mee — dan is het bericht
+			// precies de meta-kop groot. De lengte is het onderscheid; de
+			// compositor bewaakt daarna dat het bij de surface past.
+			if len(buf) == surf.DamageMetaSize {
+				d, err := surf.DecodeDamageMeta(buf)
+				if err != nil {
+					s.logf("surf: %s: bad mapped DAMAGE (%v)", sess.app, err)
+					return
+				}
+				if err := sur.Damage(int(d.X), int(d.Y), int(d.W), int(d.H), nil); err != nil {
+					s.logf("surf: %s: %v", sess.app, err)
+					return
+				}
+				sess.addDamage(h.Surface, image.Rect(int(d.X), int(d.Y), int(d.X)+int(d.W), int(d.Y)+int(d.H)))
+				break
+			}
+			d, pix, err := surf.DecodeDamage(buf)
+			if err != nil {
 				s.logf("surf: %s: bad DAMAGE (%v)", sess.app, err)
 				return
 			}
@@ -475,11 +505,65 @@ func (s *Server) unregister(sur *compositor.Surface) {
 // betekent NIET dat het window weg mag — alleen een expliciete CLOSE (de app
 // nam bewust afscheid) ruimt meteen op; anders wordt het window geparkeerd
 // en wacht het bevroren op de terugkeer van de app (adopt) of de grace.
+// mapSurface verwerkt een MAP: de app heeft HopOS gevraagd zijn vensterbuffer
+// read-only aan ons te tonen en stuurt het adres door. Vanaf dat moment leest
+// de compositor zijn pixels rechtstreeks — geen kopie over de socket, geen
+// tweede buffer aan onze kant.
+//
+// Elke fout is hier zacht: we loggen en de app blijft gewoon pixels sturen. Er
+// zijn genoeg legitieme redenen dat dit niet lukt (app op een andere node, geen
+// display-grant, een kooi die het niet kan), en géén daarvan rechtvaardigt het
+// verbreken van een werkende sessie.
+//
+// Het adres is INVOER uit een ander proces. Wij toetsen het niet zelf: dat doet
+// applib.ViewSurface, die weet welk venster HopOS voor surfaces gebruikt en
+// weigert alles daarbuiten. Zo kan een app ons niet in zijn eigen partitie of
+// in de ctrl-regio laten lezen.
+func (s *Server) mapSurface(sess *session, id uint16, buf []byte) {
+	m, err := surf.DecodeMap(buf)
+	if err != nil {
+		s.logf("surf: %s: bad MAP (%v)", sess.app, err)
+		return
+	}
+	sur := sess.get(id)
+	if sur == nil {
+		s.logf("surf: %s: MAP for unknown surface %d", sess.app, id)
+		return
+	}
+	if m.Format != surf.FormatRGBA8888 {
+		s.logf("surf: %s: MAP format %d unsupported (want RGBA8888)", sess.app, m.Format)
+		return
+	}
+	w, h := sur.Size()
+	if int(m.W) != w || int(m.H) != h || int(m.Stride) != w*4 {
+		// De app mapt op een maat die wij niet (meer) toekennen — meestal een
+		// CONFIGURE die elkaar kruiste. Hij probeert het zo opnieuw.
+		s.logf("surf: %s: MAP is %dx%d stride %d, window is %dx%d", sess.app, m.W, m.H, m.Stride, w, h)
+		return
+	}
+	view, err := shm.View(m.IPA, int(m.Stride)*int(m.H))
+	if err != nil {
+		s.logf("surf: %s: MAP rejected (%v)", sess.app, err)
+		return
+	}
+	if err := sur.Map(view, w, h); err != nil {
+		s.logf("surf: %s: MAP not taken (%v)", sess.app, err)
+		return
+	}
+	s.logf("surf: %s shares its %dx%d window at %#x — reading it directly (zero-copy)", sess.app, w, h, m.IPA)
+}
+
 func (sess *session) cleanup() {
 	bye := sess.bye.Load()
 	all := sess.takeAll()
 	for _, sur := range all {
 		sess.srv.unregister(sur)
+		// Het gedeelde zicht ALTIJD loslaten, ook als het window blijft staan
+		// (orphan): de app is weg of onbereikbaar, en HopOS trekt de grant in
+		// zodra zijn slot vrijkomt. Blijven we erin lezen, dan lezen we op enig
+		// moment iets anders dan zijn pixels. Wat er stond blijft in beeld —
+		// Unmap kopieert het naar een eigen buffer.
+		sur.Unmap()
 		if bye {
 			sess.srv.comp.Remove(sur)
 		} else {

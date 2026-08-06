@@ -13,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/xinix00/hop-os-surf/stack/shm"
 	"github.com/xinix00/hop-os-surf/stack/surf"
 )
 
@@ -47,6 +48,12 @@ type Window struct {
 	frame        uint32
 	scratch      []byte // wire-conversiebuffer (RGBA → XRGB8888)
 	events       chan Event
+
+	// mapped: dit venster deelt zijn buffer met de display (HopOS
+	// surface-grant, gui-ontwerp P3) in plaats van elke frame de pixels te
+	// versturen. img.Pix ís dan de gedeelde buffer, dus Present stuurt alleen
+	// nog rechthoeken en de scratch-conversie blijft ongebruikt.
+	mapped bool
 }
 
 // Open verbindt met een display-node (addr = host:poort, doorgaans uit de
@@ -92,9 +99,44 @@ func (win *Window) Image() *image.RGBA {
 		win.w, win.h = win.pendW, win.pendH
 		win.img = image.NewRGBA(image.Rect(0, 0, win.w, win.h))
 		win.scratch = make([]byte, win.w*win.h*4)
+		// De oude grant hoorde bij de oude maat: de display heeft hem bij zijn
+		// resize al losgelaten. Opnieuw proberen op de nieuwe maat.
+		win.mapped = false
+		win.shareLocked()
 	}
 	win.mu.Unlock()
 	return win.img
+}
+
+// shareLocked probeert het tekenvlak te delen met de display in plaats van de
+// pixels te versturen. Lukt het niet, dan verandert er niets: de pixelweg is en
+// blijft het pad dat overal werkt (een app op een andere node kan per definitie
+// niet delen).
+//
+// De truc is dat img.Pix de gedeelde buffer WORDT. De app tekent daarna gewoon
+// in image.RGBA zoals altijd en merkt er niets van — dat is precies waarom het
+// formaat van een gedeelde buffer RGBA is en niet het wire-formaat: zo hoeft er
+// aan geen van beide kanten iets omgezet te worden.
+//
+// Aanroepen met win.mu vast.
+func (win *Window) shareLocked() {
+	if win.mapped || win.conn == nil {
+		return
+	}
+	n := win.w * win.h * 4
+	pix, ipa, err := shm.Grant(n)
+	if err != nil {
+		return // geen grant op deze node: pixelweg, geen woord erover
+	}
+	copy(pix, win.img.Pix) // wat er al getekend was gaat mee
+	win.img.Pix = pix
+	m := surf.Map{IPA: ipa, W: uint16(win.w), H: uint16(win.h),
+		Stride: uint32(win.img.Stride), Format: surf.FormatRGBA8888}
+	if err := surf.WriteMsg(win.conn, surf.TypeMap, 1, m.Encode()); err != nil {
+		return // verbinding stuk; de heel-lus pakt het op
+	}
+	win.mapped = true
+	win.logf("window: sharing the %dx%d buffer with the display (no pixels on the wire)", win.w, win.h)
 }
 
 // Size geeft de actuele (WM-)maat van het window.
@@ -192,7 +234,7 @@ func (win *Window) present(rects []image.Rectangle) error {
 	}
 	// img/scratch wisselen alleen in Image() (zelfde tekengoroutine als
 	// Present — dat is het contract), dus hier consistent.
-	img, scratch := win.img, win.scratch
+	img, scratch, mapped := win.img, win.scratch, win.mapped
 	b := img.Bounds()
 	if len(rects) == 0 {
 		rects = []image.Rectangle{b}
@@ -201,6 +243,20 @@ func (win *Window) present(rects []image.Rectangle) error {
 	for _, r := range rects {
 		r = r.Intersect(b)
 		if r.Empty() {
+			continue
+		}
+		if mapped {
+			// Gedeelde buffer: de pixels stáán er al — de app tekende ze in
+			// het geheugen dat de display leest. Alleen de rechthoek dus, en
+			// geen conversie: dit is de hele winst van P3, aan de zendkant.
+			d := surf.Damage{
+				Frame: win.frame,
+				X:     uint16(r.Min.X - b.Min.X), Y: uint16(r.Min.Y - b.Min.Y),
+				W: uint16(r.Dx()), H: uint16(r.Dy()),
+			}
+			if err := surf.WriteDamageMeta(conn, 1, d); err != nil {
+				return err
+			}
 			continue
 		}
 		// RGBA → wire (XRGB8888 little-endian), alleen de rect-rijen: de
@@ -259,6 +315,11 @@ func (win *Window) connect() error {
 	}
 	win.conn = conn
 	win.dead = false
+	// Een verse sessie betekent een verse display: die kent onze buffer niet
+	// (bij een herstart is zijn hele compositor leeg). Opnieuw aanbieden — en
+	// dit is meteen de plek waar de éérste poging gebeurt.
+	win.mapped = false
+	win.shareLocked()
 	win.mu.Unlock()
 	go win.readLoop(conn)
 	return nil
