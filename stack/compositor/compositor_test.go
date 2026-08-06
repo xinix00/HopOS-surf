@@ -295,13 +295,13 @@ func TestKlikKostGeenFrame(t *testing.T) {
 	c.Relayout()
 	fillPresent(c, s1, 0xAA, 0, 0)
 	fillPresent(c, s2, 0, 0xAA, 0)
-	_, gen := c.FrameSince(0) // het volle eerste frame is geweest
+	_, gen := c.FrameSince(0, nil) // het volle eerste frame is geweest
 
 	// Klik (down+up) midden in s2 — al bovenop, al focus: geen damage.
 	p := s2.screen.Min.Add(s2.screen.Size().Div(2))
 	c.PointerDown(p.X, p.Y)
 	c.PointerUp(p.X, p.Y)
-	if frame, ngen := c.FrameSince(gen); frame != nil {
+	if frame, ngen := c.FrameSince(gen, nil); frame != nil {
 		t.Fatalf("klik op het gefocuste window kost een frame: gen %d→%d, rects %v",
 			gen, ngen, frameRects(frame))
 	}
@@ -310,7 +310,7 @@ func TestKlikKostGeenFrame(t *testing.T) {
 	q := s1.screen.Min.Add(image.Pt(4, 4)) // s2 overlapt het midden (cascade)
 	c.PointerDown(q.X, q.Y)
 	c.PointerUp(q.X, q.Y)
-	frame, ngen := c.FrameSince(gen)
+	frame, ngen := c.FrameSince(gen, nil)
 	if frame == nil {
 		t.Fatal("focuswissel hoort zichtbaar te zijn")
 	}
@@ -330,7 +330,7 @@ func TestKlikKostGeenFrame(t *testing.T) {
 	// window komt volledig terug.
 	tb := c.taskRectLocked(0).Min.Add(c.taskRectLocked(0).Size().Div(2))
 	c.PointerDown(tb.X, tb.Y) // s1 gefocust → minimize
-	frame, ngen = c.FrameSince(gen)
+	frame, ngen = c.FrameSince(gen, nil)
 	if frame == nil {
 		t.Fatal("minimize hoort zichtbaar te zijn")
 	}
@@ -341,7 +341,7 @@ func TestKlikKostGeenFrame(t *testing.T) {
 		}
 	}
 	c.PointerDown(tb.X, tb.Y) // herstel
-	frame, _ = c.FrameSince(gen)
+	frame, _ = c.FrameSince(gen, nil)
 	if frame == nil {
 		t.Fatal("herstel hoort zichtbaar te zijn")
 	}

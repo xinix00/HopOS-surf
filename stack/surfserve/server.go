@@ -612,10 +612,15 @@ func (s *Server) Handler() apphttp.Handler {
 // per compositor-generatie: tien kijkers kosten één encode.
 func (s *Server) serveScreen(w apphttp.ResponseWriter, r *apphttp.Request) {
 	s.comp.Compose()
-	img, gen := s.comp.Snapshot()
+	gen := s.comp.Gen()
 
 	s.pngMu.Lock()
 	if gen != s.pngGen || s.pngData == nil {
+		// Pas HIER de kopie maken. Stond dit vóór de cache-check, dan kostte
+		// élke aanvraag een volle 8,3MB-schermkopie die meteen weer weg kon —
+		// ook als het antwoord al klaarlag. Dat was de grootste bron van afval
+		// in de display-app (gemeten Radxa 06-08: 78 van 96 MB in gebruik).
+		img, _ := s.comp.Snapshot()
 		var buf bytes.Buffer
 		// BestSpeed: op één (geëmuleerde) core is de default-compressie de
 		// bottleneck van de hele input-lus — elke cursorbeweging maakt het
@@ -660,8 +665,12 @@ func (s *Server) serveStream(w apphttp.ResponseWriter, r *apphttp.Request) {
 	}
 
 	var gen uint64
+	var fbuf []byte // hergebruikt tussen frames — zie FrameSince
 	for {
-		frame, next := s.comp.FrameSince(gen)
+		frame, next := s.comp.FrameSince(gen, fbuf)
+		if cap(frame) > cap(fbuf) {
+			fbuf = frame[:cap(frame)]
+		}
 		if next != gen {
 			if zw != nil {
 				zbuf.Reset()

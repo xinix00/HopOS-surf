@@ -1035,8 +1035,25 @@ func (c *Compositor) drawTaskbarLocked() {
 	pixel.DrawText(c.img, c.clockRectLocked().Min.X+6, ty, c.face, 1, colTextDim, c.clockStr)
 }
 
+// Gen geeft de huidige compositor-generatie zonder iets te kopiëren.
+//
+// Bestaat om precies één reden, en die was duur: /screen.png cachet zijn PNG per
+// generatie, maar riep Snapshot ÓÓK aan als die cache raak was — dus elke
+// aanvraag kostte een volle schermkopie van 8,3 MB die meteen weer weggegooid
+// werd. Op een 1080p-scherm met een browser die elke 100ms ververst is dat
+// ~83 MB/s aan afval, en dát is wat de display-app op 78 van zijn 96 MB hield
+// (gemeten Radxa 06-08). Eerst de generatie vragen, dan pas beslissen of er
+// gekopieerd moet worden.
+func (c *Compositor) Gen() uint64 {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.gen
+}
+
 // Snapshot geeft een kopie van het gecomponeerde beeld (voor de PNG-encoder:
 // die mag niet lezen terwijl een volgende Compose tekent) plus de generatie.
+//
+// Alleen aanroepen als je die kopie ECHT gaat gebruiken — zie Gen hierboven.
 func (c *Compositor) Snapshot() (*image.RGBA, uint64) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -1059,7 +1076,7 @@ func (c *Compositor) Snapshot() (*image.RGBA, uint64) {
 // RGBA is exact wat een browser-ImageData wil hebben, nul conversie). Een
 // kijker die te ver achterloopt (of since 0) krijgt het volledige scherm.
 // Geen wijzigingen → (nil, since).
-func (c *Compositor) FrameSince(since uint64) (frame []byte, gen uint64) {
+func (c *Compositor) FrameSince(since uint64, buf []byte) (frame []byte, gen uint64) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.composeLocked()
@@ -1085,7 +1102,19 @@ func (c *Compositor) FrameSince(since uint64) (frame []byte, gen uint64) {
 	for _, r := range rects {
 		size += 8 + r.Dx()*r.Dy()*4
 	}
-	frame = make([]byte, size)
+	// buf hergebruiken als hij past: de stream-lus roept dit tientallen keren
+	// per seconde aan en elk frame kan een vol scherm zijn. Zonder hergebruik is
+	// dat 8,3 MB per iteratie de heap in — dezelfde verspilling als bij
+	// Snapshot, alleen in een lus. De aanroeper is klaar met het vorige frame
+	// vóór hij het volgende vraagt (hij schrijft het uit of comprimeert het),
+	// dus zijn eigen buffer teruggeven is veilig; een gedeelde buffer in de
+	// compositor zou dat NIET zijn (meerdere kijkers tegelijk).
+	if cap(buf) >= size {
+		frame = buf[:size]
+		clear(frame)
+	} else {
+		frame = make([]byte, size)
+	}
 	le := func(off int, v uint32, n int) {
 		for i := 0; i < n; i++ {
 			frame[off+i] = byte(v >> (8 * i))

@@ -87,9 +87,14 @@ func fbFromEnv(app *applib.App) *fbTarget {
 // hele software-compose) op de Pi overbodig.
 func (f *fbTarget) blitLoop(comp *compositor.Compositor) {
 	var gen uint64
+	var fbuf []byte // hergebruikt tussen frames: 20 Hz × een vol scherm is
+	// anders 166 MB/s aan verse allocaties, puur om ze weg te gooien.
 	for {
 		t0 := time.Now()
-		frame, g := comp.FrameSince(gen)
+		frame, g := comp.FrameSince(gen, fbuf)
+		if cap(frame) > cap(fbuf) {
+			fbuf = frame[:cap(frame)]
+		}
 		if frame != nil {
 			gen = g
 			f.blitFrame(frame)
