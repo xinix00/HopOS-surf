@@ -11,13 +11,13 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/xinix00/HopOS/metal/app/applib"
+	"github.com/xinix00/HopOS/metal/app/applib/appnet"
 	"github.com/xinix00/hop-os-surf/app/hopapi"
 	"github.com/xinix00/hop-os-surf/stack/compositor"
 	"github.com/xinix00/hop-os-surf/stack/surf"
 	"github.com/xinix00/hop-os-surf/stack/surfserve"
-	"github.com/xinix00/HopOS/metal/app/applib"
-	"github.com/xinix00/HopOS/metal/app/applib/apphttp"
-	"github.com/xinix00/HopOS/metal/app/applib/appnet"
+	"github.com/xinix00/lean/leanhttp"
 )
 
 func main() {
@@ -106,7 +106,7 @@ func main() {
 		httpPort = "80"
 	}
 	app.Logf("display: %dx%d — surf %s:%s, web-kvm http://%s:%s/kvm", w, h, ip, surfPort, ip, httpPort)
-	app.Logf("http: %v", apphttp.ListenAndServe(":"+httpPort, srv.Handler()))
+	app.Logf("http: %v", leanhttp.ListenAndServe(":"+httpPort, srv.Handler()))
 	app.Exit(1) // een display die stopt met serveren is een crash, by design
 }
 

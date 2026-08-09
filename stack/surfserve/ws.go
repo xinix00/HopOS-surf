@@ -16,22 +16,22 @@ import (
 	"io"
 	"strings"
 
-	"github.com/xinix00/HopOS/metal/app/applib/apphttp"
+	"github.com/xinix00/lean/leanhttp"
 )
 
 const wsGUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
 
 // wsUpgrade meldt of dit verzoek een WebSocket-handshake is.
-func wsUpgrade(r *apphttp.Request) bool {
+func wsUpgrade(r *leanhttp.Request) bool {
 	return strings.EqualFold(r.Header.Get("Upgrade"), "websocket")
 }
 
 // serveInputWS neemt de verbinding over en verwerkt input-events tot hij
 // sluit. Elk text/binary-frame is één inputMsg (zelfde JSON als de POST).
-func (s *Server) serveInputWS(w apphttp.ResponseWriter, r *apphttp.Request) {
+func (s *Server) serveInputWS(w leanhttp.ResponseWriter, r *leanhttp.Request) {
 	key := r.Header.Get("Sec-WebSocket-Key")
 	if key == "" {
-		apphttp.Error(w, "bad websocket handshake", apphttp.StatusBadRequest)
+		leanhttp.Error(w, "bad websocket handshake", leanhttp.StatusBadRequest)
 		return
 	}
 	conn, brw, err := w.Hijack()

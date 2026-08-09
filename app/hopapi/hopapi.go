@@ -6,7 +6,7 @@
 // Het transport is apphttp (HopOS) en niet net/http: het cluster praat plain
 // http op het interne net, en net/http linkt onvoorwaardelijk crypto/tls mee —
 // ~2,9MB die taskman en launcher anders in élk image meedragen voor TLS dat ze
-// nooit gebruiken. Zie de pakket-doc van hop-os/metal/app/applib/apphttp.
+// nooit gebruiken. Zie de pakket-doc van hop-os/metal/app/applib/leanhttp.
 //
 // Auth is HOP's HMAC-schema (hop/pkg/httputil): X-Hop-Auth =
 // hex(HMAC-SHA256(key, METHOD\nPATH\nhex(sha256(body)))). Lege key = geen
@@ -25,7 +25,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/xinix00/HopOS/metal/app/applib/apphttp"
+	"github.com/xinix00/lean/leanhttp"
 )
 
 // Agent is één geregistreerde node (GET /v1/agents).
@@ -92,28 +92,28 @@ type Client struct {
 const callTimeout = 10 * time.Second
 
 // call doet één gesigneerd verzoek. De aanroeper sluit resp.Body.
-func (c *Client) call(method, path string, body []byte, timeout time.Duration) (*apphttp.Response, error) {
-	req := apphttp.Call{
+func (c *Client) call(method, path string, body []byte, timeout time.Duration) (*leanhttp.Response, error) {
+	req := leanhttp.Call{
 		Method:  method,
 		URL:     c.Base + path,
 		Body:    body,
 		Timeout: timeout,
 	}
 	if body != nil {
-		req.Header = apphttp.Header{"Content-Type": "application/json"}
+		req.Header = leanhttp.Header{"Content-Type": "application/json"}
 	}
 	if c.Key != "" {
 		if req.Header == nil {
-			req.Header = apphttp.Header{}
+			req.Header = leanhttp.Header{}
 		}
 		req.Header.Set("X-Hop-Auth", sign(c.Key, method, path, body))
 	}
-	return apphttp.Do(req)
+	return leanhttp.Do(req)
 }
 
 // fout maakt van een niet-2xx-antwoord een leesbare fout; de body zegt vaak
 // wat er mis is, dus de eerste 200 bytes gaan mee.
-func fout(wat string, resp *apphttp.Response) error {
+func fout(wat string, resp *leanhttp.Response) error {
 	b, _ := io.ReadAll(io.LimitReader(resp.Body, 200))
 	return fmt.Errorf("hop: %s: %s (%s)", wat, resp.Status, b)
 }
@@ -155,7 +155,7 @@ func (c *Client) Apply(spec []byte) error {
 		return fmt.Errorf("hop: apply: %w", err)
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode != apphttp.StatusOK && resp.StatusCode != apphttp.StatusCreated {
+	if resp.StatusCode != leanhttp.StatusOK && resp.StatusCode != leanhttp.StatusCreated {
 		return fout("apply", resp)
 	}
 	return nil
@@ -169,7 +169,7 @@ func (c *Client) Delete(name string) error {
 		return fmt.Errorf("hop: delete: %w", err)
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode != apphttp.StatusOK && resp.StatusCode != apphttp.StatusNoContent {
+	if resp.StatusCode != leanhttp.StatusOK && resp.StatusCode != leanhttp.StatusNoContent {
 		return fout("delete", resp)
 	}
 	return nil
@@ -203,7 +203,7 @@ func (c *Client) Logs(agentID, taskID, stream string) (*LogStream, error) {
 	if err != nil {
 		return nil, fmt.Errorf("hop: logs: %w", err)
 	}
-	if resp.StatusCode != apphttp.StatusOK {
+	if resp.StatusCode != leanhttp.StatusOK {
 		defer resp.Body.Close()
 		return nil, fout("logs", resp)
 	}
@@ -240,7 +240,7 @@ func (c *Client) get(path string, out any) error {
 		return fmt.Errorf("hop: %s: %w", path, err)
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode != apphttp.StatusOK {
+	if resp.StatusCode != leanhttp.StatusOK {
 		return fout(path, resp)
 	}
 	return json.NewDecoder(resp.Body).Decode(out)

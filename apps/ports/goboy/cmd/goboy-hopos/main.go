@@ -29,11 +29,11 @@ import (
 
 	"goboy/internal/gbapp"
 
-	"github.com/xinix00/hop-os-surf/stack/surf"
-	"github.com/xinix00/hop-os-surf/stack/window"
 	"github.com/xinix00/HopOS/metal/app/applib"
 	"github.com/xinix00/HopOS/metal/app/applib/appnet"
-	"github.com/xinix00/HopOS/metal/app/applib/apphttp"
+	"github.com/xinix00/hop-os-surf/stack/surf"
+	"github.com/xinix00/hop-os-surf/stack/window"
+	"github.com/xinix00/lean/leanhttp"
 )
 
 func main() {
@@ -54,7 +54,7 @@ func main() {
 		app.Exit(1)
 	}
 
-	resp, err := apphttp.Get(romURL)
+	resp, err := leanhttp.Get(romURL)
 	if err != nil {
 		app.Logf("goboy: rom %s: %v", romURL, err)
 		app.Exit(1)

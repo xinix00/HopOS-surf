@@ -10,7 +10,7 @@ import (
 	"net"
 	"testing"
 
-	"github.com/xinix00/HopOS/metal/app/applib/apphttp"
+	"github.com/xinix00/lean/leanhttp"
 )
 
 type webTest struct {
@@ -26,6 +26,6 @@ func newWeb(t *testing.T, s *Server) *webTest {
 	if err != nil {
 		t.Fatalf("web-listener: %v", err)
 	}
-	go apphttp.Serve(ln, s.Handler())
+	go leanhttp.Serve(ln, s.Handler())
 	return &webTest{URL: "http://" + ln.Addr().String(), ln: ln}
 }

@@ -21,7 +21,7 @@ import (
 
 	"github.com/xinix00/hop-os-surf/stack/compositor"
 	"github.com/xinix00/hop-os-surf/stack/surf"
-	"github.com/xinix00/HopOS/metal/app/applib/apphttp"
+	"github.com/xinix00/lean/leanhttp"
 )
 
 // orphanGrace: hoe lang een window zonder verbinding blijft staan. Ruim
@@ -590,8 +590,8 @@ func (s *Server) Input(ev surf.Input) {
 // onvoorwaardelijk crypto/tls mee — ~2,9MB TLS in het display-image voor een
 // KVM-pagina op het LAN die nooit https praat. Routeren doen we hier zelf: vijf
 // paden zijn een switch, geen mux.
-func (s *Server) Handler() apphttp.Handler {
-	return func(w apphttp.ResponseWriter, r *apphttp.Request) {
+func (s *Server) Handler() leanhttp.Handler {
+	return func(w leanhttp.ResponseWriter, r *leanhttp.Request) {
 		switch r.Path {
 		case "/screen.png":
 			s.serveScreen(w, r)
@@ -603,14 +603,14 @@ func (s *Server) Handler() apphttp.Handler {
 		case "/input":
 			s.serveInput(w, r)
 		default:
-			apphttp.Redirect(w, "/kvm", apphttp.StatusFound)
+			leanhttp.Redirect(w, "/kvm", leanhttp.StatusFound)
 		}
 	}
 }
 
 // serveScreen componeert (lazy — geen client, geen werk) en cachet de PNG
 // per compositor-generatie: tien kijkers kosten één encode.
-func (s *Server) serveScreen(w apphttp.ResponseWriter, r *apphttp.Request) {
+func (s *Server) serveScreen(w leanhttp.ResponseWriter, r *leanhttp.Request) {
 	s.comp.Compose()
 	gen := s.comp.Gen()
 
@@ -629,7 +629,7 @@ func (s *Server) serveScreen(w apphttp.ResponseWriter, r *apphttp.Request) {
 		enc := png.Encoder{CompressionLevel: png.BestSpeed}
 		if err := enc.Encode(&buf, img); err != nil {
 			s.pngMu.Unlock()
-			apphttp.Error(w, err.Error(), apphttp.StatusInternalServerError)
+			leanhttp.Error(w, err.Error(), leanhttp.StatusInternalServerError)
 			return
 		}
 		s.pngGen, s.pngData = gen, buf.Bytes()
@@ -650,7 +650,7 @@ func (s *Server) serveScreen(w apphttp.ResponseWriter, r *apphttp.Request) {
 // (putImageData) en er wordt geen PNG meer geëncodeerd voor kijkers. Idle
 // scherm = nul bytes. 25 Hz polling op het generatienummer is display-side
 // een mutex-check; de kijkers-kant van docs/gui-ontwerp.md §6.
-func (s *Server) serveStream(w apphttp.ResponseWriter, r *apphttp.Request) {
+func (s *Server) serveStream(w leanhttp.ResponseWriter, r *leanhttp.Request) {
 	w.Header().Set("Content-Type", "application/octet-stream")
 	w.Header().Set("Cache-Control", "no-store")
 
@@ -727,27 +727,27 @@ func (m inputMsg) event() (surf.Input, bool) {
 	return ev, true
 }
 
-func (s *Server) serveInput(w apphttp.ResponseWriter, r *apphttp.Request) {
+func (s *Server) serveInput(w leanhttp.ResponseWriter, r *leanhttp.Request) {
 	if wsUpgrade(r) {
 		s.serveInputWS(w, r) // de blijvende input-stream van de KVM-pagina
 		return
 	}
 	if r.Method != "POST" {
-		apphttp.Error(w, "POST only", apphttp.StatusMethodNotAllowed)
+		leanhttp.Error(w, "POST only", leanhttp.StatusMethodNotAllowed)
 		return
 	}
 	var m inputMsg
 	if err := json.NewDecoder(r.Body).Decode(&m); err != nil {
-		apphttp.Error(w, err.Error(), apphttp.StatusBadRequest)
+		leanhttp.Error(w, err.Error(), leanhttp.StatusBadRequest)
 		return
 	}
 	ev, ok := m.event()
 	if !ok {
-		apphttp.Error(w, "unknown kind", apphttp.StatusBadRequest)
+		leanhttp.Error(w, "unknown kind", leanhttp.StatusBadRequest)
 		return
 	}
 	s.Input(ev)
-	w.WriteHeader(apphttp.StatusNoContent)
+	w.WriteHeader(leanhttp.StatusNoContent)
 }
 
 func clampU16(v int) uint16 {
