@@ -16,7 +16,7 @@ go 1.26.4
 require (
 	github.com/andybalholm/cascadia v1.3.4
 	github.com/tdewolff/canvas v0.0.0-20260714230319-248e24504c3b
-	github.com/xinix00/HopOS/metal v1.12.0
+	github.com/xinix00/HopOS/metal v1.12.1
 	github.com/xinix00/lean v0.1.0
 	golang.org/x/image v0.44.0
 	golang.org/x/net v0.55.0
@@ -42,7 +42,7 @@ require (
 	github.com/tdewolff/minify/v2 v2.24.13 // indirect
 	github.com/tdewolff/parse/v2 v2.8.12 // indirect
 	github.com/usbarmory/tamago v1.26.4 // indirect
-	github.com/xinix00/go-net v0.1.0-hopos.1 // indirect
+	github.com/xinix00/go-net v0.1.1-hopos.1 // indirect
 	github.com/xinix00/lneto v0.4.0-hopos.1 // indirect
 	github.com/yuin/goldmark v1.8.2 // indirect
 	golang.org/x/sys v0.45.0 // indirect
