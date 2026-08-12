@@ -63,8 +63,8 @@ github.com/usbarmory/tamago v1.26.4 h1:laFvRANKgVYFHxLHjIlhqJCc3Xm+qMyab2SlUoNw6
 github.com/usbarmory/tamago v1.26.4/go.mod h1:HZkb+ZkzFl8aCxAuF7exsKX+XaNM0mYG9Iv7ooX1WDY=
 github.com/xinix00/HopOS/metal v1.12.4 h1:1VmGlFoKsPSIKJ5X8wMheH8FNpD7IBh5WNashzD/nhg=
 github.com/xinix00/HopOS/metal v1.12.4/go.mod h1:X2N4hfONHqcSzon/vcXaWSi1IV/RPxfLAUrddbzKw7w=
-github.com/xinix00/lean v0.2.0 h1:Q8lMUSo9De7jgAxu223ng6hxpDkVqy0AQwrWFDzxbpM=
-github.com/xinix00/lean v0.2.0/go.mod h1:gRIa2nL/SIEsi1L/eq9EUqrKQ+jnjxUGb3IAsuVQX7U=
+github.com/xinix00/lean v0.3.0 h1:UaVCfN870X/5BJt1e6EMgCEc/I1zLqBYVewG4/kIi/I=
+github.com/xinix00/lean v0.3.0/go.mod h1:gRIa2nL/SIEsi1L/eq9EUqrKQ+jnjxUGb3IAsuVQX7U=
 github.com/xyproto/randomstring v1.0.5 h1:YtlWPoRdgMu3NZtP45drfy1GKoojuR7hmRcnhZqKjWU=
 github.com/xyproto/randomstring v1.0.5/go.mod h1:rgmS5DeNXLivK7YprL0pY+lTuhNQW3iGxZ18UQApw/E=
 github.com/yuin/goldmark v1.8.2 h1:kEGpgqJXdgbkhcOgBxkC0X0PmoPG1ZyoZ117rDVp4zE=
