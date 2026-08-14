@@ -651,6 +651,26 @@ func (s *Server) serveScreen(w leanhttp.ResponseWriter, r *leanhttp.Request) {
 // scherm = nul bytes. 25 Hz polling op het generatienummer is display-side
 // een mutex-check; de kijkers-kant van docs/gui-ontwerp.md §6.
 func (s *Server) serveStream(w leanhttp.ResponseWriter, r *leanhttp.Request) {
+	// Alleen exact GET en zonder body, VÓÓR de Done-claim: Done panickt
+	// (terecht, lean review 13-08, tweeëndertigste ronde) op een ongelezen
+	// requestbody, en een panic is op HopOS by design dodelijk — een kale
+	// "GET /stream" mét "Content-Length: 1" was zo één verzoek dat het hele
+	// display-proces omlegt. Na de weigering draint serveConn het restant
+	// begrensd, dus het antwoord komt netjes aan.
+	if r.Method != "GET" {
+		w.Header().Set("Allow", "GET")
+		leanhttp.Error(w, "method not allowed", leanhttp.StatusMethodNotAllowed)
+		return
+	}
+	// Via de headers en niet r.ContentLength: dat veld bestaat pas ná lean
+	// v0.5.1, en deze wacht moet ook tegen de gepinde tag bouwen. De
+	// Transfer-Encoding-arm dekt op v0.5.1 chunked uploads (nieuwere leans
+	// weigeren die al aan de deur).
+	if cl := r.Header.Get("Content-Length"); (cl != "" && cl != "0") ||
+		r.Header.Get("Transfer-Encoding") != "" {
+		leanhttp.Error(w, "a request body is not allowed on /stream", leanhttp.StatusBadRequest)
+		return
+	}
 	w.Header().Set("Content-Type", "application/octet-stream")
 	w.Header().Set("Cache-Control", "no-store")
 
@@ -663,6 +683,12 @@ func (s *Server) serveStream(w leanhttp.ResponseWriter, r *leanhttp.Request) {
 	if r.Query().Get("z") == "1" {
 		zw, _ = flate.NewWriter(&zbuf, flate.BestSpeed)
 	}
+
+	// Het done-kanaal VÓÓR de eerste Write+Flush claimen: Done is de eigenaar
+	// van de leeskant én zet de kop op "Connection: close" — na de eerste
+	// Flush is die kop al de deur uit met keep-alive erin, en leanhttp
+	// panickt daar sinds review 13-08 (tweeëndertigste ronde) fail-fast op.
+	done := r.Done()
 
 	var gen uint64
 	var fbuf []byte // hergebruikt tussen frames — zie FrameSince
@@ -693,7 +719,7 @@ func (s *Server) serveStream(w leanhttp.ResponseWriter, r *leanhttp.Request) {
 			gen = next
 		}
 		select {
-		case <-r.Done():
+		case <-done:
 			return
 		case <-time.After(15 * time.Millisecond):
 		}

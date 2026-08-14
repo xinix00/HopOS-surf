@@ -144,3 +144,60 @@ func TestStream(t *testing.T) {
 		t.Fatalf("cursor move must not compose, got %d frames", n)
 	}
 }
+
+// TestStreamWeigertBodyEnVreemdeMethode — /stream claimt Request.Done, en
+// lean's Done panickt (terecht, review 13-08, tweeëndertigste ronde) op een
+// ongelezen requestbody; een panic is op HopOS by design dodelijk. Zonder de
+// wacht in serveStream was één "GET /stream" mét "Content-Length: 1" dus
+// genoeg om het hele display-proces om te leggen. De wacht wijst af vóór de
+// claim: body → 400, andere methode → 405 — en het proces leeft door.
+func TestStreamWeigertBodyEnVreemdeMethode(t *testing.T) {
+	comp := compositor.New(320, 200)
+	srv := New(comp, t.Logf)
+	web := newWeb(t, srv)
+	defer web.Close()
+
+	raw := func(req string) string {
+		t.Helper()
+		c, err := net.Dial("tcp4", web.URL[len("http://"):])
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer c.Close()
+		c.SetDeadline(time.Now().Add(5 * time.Second))
+		if _, err := c.Write([]byte(req)); err != nil {
+			t.Fatal(err)
+		}
+		out, _ := io.ReadAll(c)
+		return string(out)
+	}
+
+	got := raw("GET /stream HTTP/1.1\r\nHost: x\r\nContent-Length: 1\r\nConnection: close\r\n\r\nX")
+	if !contains(got, "400") {
+		t.Fatalf("GET /stream met body gaf %q, wil een 400", got)
+	}
+	got = raw("POST /stream HTTP/1.1\r\nHost: x\r\nConnection: close\r\n\r\n")
+	if !contains(got, "405") || !contains(got, "Allow: GET") {
+		t.Fatalf("POST /stream gaf %q, wil een 405 met Allow: GET", got)
+	}
+
+	// En het proces leeft nog: een nette stream start gewoon.
+	resp, err := http.Get(web.URL + "/stream")
+	if err != nil {
+		t.Fatalf("stream na de afwijzingen: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		t.Fatalf("status %d na de afwijzingen, wil 200", resp.StatusCode)
+	}
+}
+
+// contains is strings.Contains zonder een extra import in dit testbestand.
+func contains(s, sub string) bool {
+	for i := 0; i+len(sub) <= len(s); i++ {
+		if s[i:i+len(sub)] == sub {
+			return true
+		}
+	}
+	return false
+}
