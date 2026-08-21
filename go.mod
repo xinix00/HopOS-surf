@@ -16,7 +16,7 @@ go 1.26.4
 require (
 	github.com/andybalholm/cascadia v1.3.4
 	github.com/tdewolff/canvas v0.0.0-20260714230319-248e24504c3b
-	github.com/xinix00/HopOS/metal v1.99.0
+	github.com/xinix00/HopOS/metal v1.99.1
 	github.com/xinix00/lean v0.99.0
 	golang.org/x/image v0.44.0
 	golang.org/x/net v0.55.0
