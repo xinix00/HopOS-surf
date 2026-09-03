@@ -9,8 +9,8 @@ package main
 import (
 	"fmt"
 
-	"github.com/xinix00/HopOS/metal/app/applib"
-	"github.com/xinix00/HopOS/metal/app/applib/appnet"
+	"github.com/xinix00/HopOS/metal/v2/app/applib"
+	"github.com/xinix00/HopOS/metal/v2/app/applib/appnet"
 
 	"github.com/xinix00/hop-os-surf/app/calc"
 	"github.com/xinix00/hop-os-surf/stack/scene"
