@@ -40,7 +40,7 @@ require (
 	github.com/tdewolff/minify/v2 v2.24.13 // indirect
 	github.com/tdewolff/parse/v2 v2.8.12 // indirect
 	github.com/usbarmory/tamago v1.26.4 // indirect
-	github.com/xinix00/HopOS/metal/v2 v2.0.0
+	github.com/xinix00/HopOS/metal/v2 v2.0.1
 	github.com/yuin/goldmark v1.8.2 // indirect
 	golang.org/x/text v0.40.0 // indirect
 	modernc.org/knuth v0.5.5 // indirect
