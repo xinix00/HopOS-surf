@@ -30,6 +30,9 @@ import (
 // herstart van de node-kant en een display die eerder op is dan de USB-scan.
 const hopInputRetry = 2 * time.Second
 
+// HopOS sends an empty line every five seconds, including while input is idle.
+const hopInputTimeout = 15 * time.Second
+
 // ConsumeInput belt HopOS' invoerstroom en voert alles wat binnenkomt de
 // gewone input-routering in. Blokkeert; start hem als goroutine. Lege addr =
 // dit board serveert geen fysieke invoer (geen USB, of headless) en dan doet
@@ -58,7 +61,18 @@ func (s *Server) ConsumeInput(addr string) {
 // hele toetsenbord.
 func (s *Server) readInput(c net.Conn) {
 	sc := bufio.NewScanner(c)
-	for sc.Scan() {
+	for {
+		// A FLIP can discard the node half without FIN/RST reaching this app.
+		// Bound that silent loss so ConsumeInput reaches its existing retry loop.
+		if err := c.SetReadDeadline(time.Now().Add(hopInputTimeout)); err != nil {
+			return
+		}
+		if !sc.Scan() {
+			return
+		}
+		if len(sc.Bytes()) == 0 {
+			continue
+		}
 		var m inputMsg
 		if err := json.Unmarshal(sc.Bytes(), &m); err != nil {
 			continue

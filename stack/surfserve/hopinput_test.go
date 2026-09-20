@@ -8,6 +8,7 @@ import (
 	"net"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/xinix00/hop-os-surf/stack/compositor"
 	"github.com/xinix00/hop-os-surf/stack/surf"
@@ -129,4 +130,55 @@ func findColorComp(c *compositor.Compositor, want color.RGBA) (image.Point, bool
 		}
 	}
 	return image.Point{}, false
+}
+
+// Shorten only the test connection's actual deadline; still verify the production bound.
+type inputDeadlineConn struct {
+	net.Conn
+	invalid atomic.Bool
+}
+
+func (c *inputDeadlineConn) SetReadDeadline(t time.Time) error {
+	if d := time.Until(t); d < 14*time.Second || d > 15*time.Second {
+		c.invalid.Store(true)
+	}
+	return c.Conn.SetReadDeadline(time.Now().Add(100 * time.Millisecond))
+}
+func TestInputSilentLossAndHeartbeat(t *testing.T) {
+	srv := New(compositor.New(320, 200), t.Logf)
+	var moves atomic.Int64
+	srv.OnPointer(func(x, y int) { moves.Add(1) })
+	a, b := net.Pipe()
+	defer a.Close()
+	defer b.Close()
+	c := &inputDeadlineConn{Conn: a}
+	done := make(chan struct{})
+	go func() { srv.readInput(c); close(done) }()
+	// Several heartbeat intervals exceed the silent deadline in total.
+	for i := 0; i < 10; i++ {
+		if _, err := fmt.Fprint(b, "\n"); err != nil {
+			t.Fatal(err)
+		}
+		select {
+		case <-done:
+			t.Fatal("heartbeat stream expired")
+		case <-time.After(20 * time.Millisecond):
+		}
+	}
+	if moves.Load() != 0 {
+		t.Fatal("heartbeat generated input")
+	}
+	if _, err := fmt.Fprint(b, "{\"k\":\"move\",\"x\":11,\"y\":22}\n"); err != nil {
+		t.Fatal(err)
+	}
+	eventually(t, "real input preserved", func() bool { return moves.Load() == 1 })
+	// Keep peer open but stop sending: model silent node-side connection loss.
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("silent stream did not expire")
+	}
+	if c.invalid.Load() {
+		t.Fatal("read deadline differs from15seconds")
+	}
 }
